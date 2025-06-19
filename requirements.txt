@@ -1,0 +1,20 @@
+# Para Jupyter Notebook
+ipykernel
+
+
+keras
+tensorflow
+# Para dibujar modelos
+pydot
+
+numpy
+pandas
+matplotlib
+seaborn
+
+pyts
+pytz
+requests
+pymssql
+influxdb-client
+humanize

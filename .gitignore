@@ -1,0 +1,5 @@
+__pycache__
+.*.swp
+kk*
+params-influx.json
+params-mssql.json
