@@ -30,7 +30,15 @@ class ClienteInflux:
 ###################################################################
 
     def conectar(self) -> influxdb_client.InfluxDBClient:
-        self.cliente_influx = influxdb_client.InfluxDBClient(url=self.params['INFLUX_HOST'], token=self.params["INFLUX_TOKEN"], org=self.params["INFLUX_ORG"], timeout=60000)
+        self.cliente_influx = influxdb_client.InfluxDBClient(
+            url=f"{self.params['INFLUX_HOST']}",
+            token=self.params["INFLUX_TOKEN"],
+            org=self.params["INFLUX_ORG"],
+            timeout=60000,
+            ssl=True,
+            verify_ssl=True,
+            ssl_ca_cert='letsencrypt.pem',
+        )
         return self.cliente_influx
 
 ###################################################################

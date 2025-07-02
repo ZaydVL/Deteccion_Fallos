@@ -17,4 +17,5 @@ pytz
 requests
 pymssql
 influxdb-client
+psycopg[binary]
 humanize

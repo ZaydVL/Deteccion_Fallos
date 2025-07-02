@@ -1,0 +1,278 @@
+import os
+import json
+from datetime import datetime,timedelta
+from dataclasses import dataclass, asdict
+import numpy as np
+import pandas as pd
+from cliente_influx import ClienteInflux
+from cliente_pgsql import ClientePostgres
+import random
+
+depurar = True if "DEPURAR" in os.environ and os.environ["DEPURAR"].lower() == "true" else False
+
+###################################################################
+
+def corregir_fecha(fecha):
+    ''' Corrige el formato de fecha para que sea compatible con InfluxDB.
+    Por ejemplo, convierte '2023-10-01 12:00:00' en '2023-10-01T12:00:00Z'.
+    Si ya es un objeto datetime, lo convierte a string en el formato correcto.'''
+    if isinstance(fecha, str):
+        if 'T' not in fecha:
+            fecha = fecha.replace(' ', 'T')
+    elif isinstance(fecha, datetime):
+        fecha = fecha.strftime('%Y-%m-%dT%H:%M:%SZ')
+    return fecha
+
+###################################################################
+
+def cargar_df(cliente_influx: ClienteInflux, nom_bucket: str, nom_medida, t_inicio, t_final) -> pd.DataFrame:
+    ''' Carga de InfluxDB los datos de una variable de operación entre dos fechas.'''
+    t_inicio = corregir_fecha(t_inicio)
+    t_final = corregir_fecha(t_final)
+    consulta = f'''
+        from(bucket:"{nom_bucket}") |>
+        range(start: {t_inicio}, stop: {t_final}) |>
+        filter(fn: (r) => r["_measurement"] == "{nom_medida}") |>
+        pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")|> group()
+    '''
+    if depurar:
+        print(f'CONSULTA INFLUX: {consulta}')
+    df = cliente_influx.cargar_df(consulta=consulta)
+    for campo in [ 'ct', 'in', 'tr', 'sb', 'st' ]:
+        if campo in df.columns:
+            df[campo] = pd.to_numeric(df[campo])
+    df.index = df.index.tz_localize(None)
+    return df
+
+###################################################################
+
+@dataclass
+class PVET_id:
+    id: int
+    CT: int
+    IN: int
+    TR: int
+    SB: int
+    ST: int
+    pos: int
+    type: int
+
+    def __str__(self):
+        return f'D{self.id}:CT{self.CT}/IN{self.IN}/TR{self.TR}/SB{self.SB}/ST{self.ST}'
+
+PVET_ids = {}
+
+def cargar_PVET_ids(cliente_sql: ClientePostgres, planta:str, usar_cache=False) -> dict[int,PVET_id]:
+    ''' Carga los identificadores de los dispositivos PVET desde la base de datos SQL.
+    Si usar_cache es True, intenta cargar los datos desde un fichero JSONL.'''
+    nom_fich_pvet_ids = f'pvet_ids-{planta}.jsonl'
+    if usar_cache and os.path.exists(nom_fich_pvet_ids):
+        with open(nom_fich_pvet_ids, 'r') as f:
+            for o in f:
+                aux1 = json.loads(o)
+                aux2 = PVET_id(**aux1)
+                PVET_ids[aux2.id] = aux2
+    else:
+        consulta_sql = f"SELECT * FROM PVET_ids"
+        cursor = cliente_sql.obtener_cursor(consulta_sql)
+        for fila in cursor:
+            elem = PVET_id(id=fila['id'], CT=fila['ct'], IN=fila['in'], TR=fila['tr'], SB=fila['sb'], ST=fila['st'], pos=fila['pos'], type=fila['type'])
+            PVET_ids[elem.id] = elem
+        if usar_cache:
+            with open(nom_fich_pvet_ids, 'w') as f:
+                for o in PVET_ids.values():
+                    print(json.dumps(asdict(o)), file=f)
+    return PVET_ids
+
+###################################################################
+
+def seleccionar_dispositivo(df: pd.DataFrame, disp: PVET_id) -> pd.DataFrame:
+    ''' Devuelve un DataFrame filtrado por el dispositivo indicado.'''
+    consulta = ''
+    for campo in [ 'ct', 'in', 'tr', 'sb', 'st' ]:
+        if campo in df.columns:
+            if len(consulta) > 0:
+                consulta += ' & '
+            consulta += f"(`{campo}` == {getattr(disp, campo.upper())})"
+    if depurar:
+        print(f'CONSULTA PANDAS: {consulta}')
+    return df.query(consulta)
+
+###################################################################
+
+def escoger_otro_dispositivo(PVET_ids, disp_fallo: PVET_id):
+    ''' Escoge un dispositivo diferente al indicado, pero del mismo tipo.'''
+    buscar = True
+    while buscar:
+        id_otro = random.randint(1, len(PVET_ids)-1)
+        buscar = id_otro != disp_fallo.id and id_otro in PVET_ids and PVET_ids[id_otro].type == disp_fallo.type
+    return PVET_ids[id_otro]
+
+###################################################################
+
+def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflux, nom_planta:str, tipo_fallo:str, tabla_disp:str, margen_temporal_h:int=0) -> pd.DataFrame:
+    ''' Devuelve un DataFrame con los datos de cada fallo y de varios dispositivos sanos.
+    '''
+    nom_tabla_fallos = 'DDA_DIA'
+    tabla_disp = f'vop_{tipo_fallo}'.lower()
+    consulta = f"SELECT COUNT(*) FROM {nom_tabla_fallos} WHERE Type = '{tipo_fallo}' AND ope_ck = 1"
+    #cliente_sql.obtener_cursor(consulta, as_dict=False)
+    cliente_sql.obtener_cursor(consulta)
+    num_fallos = int(cliente_sql.leer_registro()['count'])
+    dispositivos_sanos = obtener_dispositivos_sanos(cliente_sql, tipo_fallo)
+    # Obtiene todos los fallos validados de ese tipo
+    consulta_sql = f""" SELECT * FROM {nom_tabla_fallos}
+                        JOIN diagnosis ON {nom_tabla_fallos}.diag=diagnosis.code
+                        WHERE Type = '{tipo_fallo}' AND ope_ck = 1
+                        ORDER BY diag,Duration DESC"""
+    if depurar:
+        print(f'CONSULTA SQL: {consulta_sql}')
+    cursor = cliente_sql.obtener_cursor(consulta_sql)
+
+    # Para cada fallo, guardará los datos de ese fallo y de varios dispositivos sanos
+    # A cada fallo se le asigna un id de grupo de fallo, y a cada dispositivo un id de caso.
+    # Por tanto, todos los dispositivos de un mismo fallo tendrán el mismo id de grupo de fallo,
+    # y cada dispositivo tendrá un id de caso único.
+    df_casos = None
+    num_id_fallo = num_id_caso = num_fallo = 1
+    for fila in cursor:
+        print(f'{num_fallo}/{num_fallos} FALLOS')
+        ini_time = fila['ini_time']
+        end_time = fila['end_time']
+        id_dispositivo_fallo = fila['id']
+        diag_fallo = fila['diag']
+        diag_fallo_txt = fila['esp']
+        duración_fallo = fila['duration']
+        # fallo_continuo es True si el fallo existe durante todo el período ini-end_time
+        fallo_continuo = (duración_fallo - 15) == ((end_time - ini_time).total_seconds() / 60)
+
+        # Carga los datos de todos los dispositivos de ese día (00:00:00 a 23:59:59)
+        # Añade un margen temporal de N horas antes y después
+        ini_día = datetime(ini_time.year, ini_time.month, ini_time.day)
+        fin_día = datetime(ini_time.year, ini_time.month, ini_time.day) + timedelta(seconds=86399)
+        df_día = cargar_df(cliente_influx, nom_planta, tabla_disp, ini_día - timedelta(hours=margen_temporal_h), fin_día + timedelta(hours=margen_temporal_h))
+
+        # Ahora va a guardar los datos del dispositivo que ha fallado y de varios sanos
+        disp_fallo = PVET_ids[id_dispositivo_fallo]
+        dispositivos_guardar = [ disp_fallo ]
+        # Escoge varios dispositivos sanos al azar. Intenta que sean 5, pero a veces hay menos.
+        num_disp_sanos = min(5, len(dispositivos_sanos))
+        ids_dispositivos_sanos = random.sample(list(dispositivos_sanos.keys()), num_disp_sanos)
+        for i in ids_dispositivos_sanos:
+            dispositivos_guardar.append(dispositivos_sanos[i])
+
+        # Para cada dispositivo, selecciona los datos del día y los guarda en el DataFrame
+        # Si el dispositivo no tiene datos suficientes, lo ignora.
+        # Si el dispositivo que ha fallado no tiene datos suficientes, no guarda nada.
+        # Si es el dispositivo que ha fallado, guarda los datos del fallo.
+        # Si es un dispositivo sano, guarda los datos como si no hubiera fallado.
+        num_dispositivos_guardados = 0
+        for dispositivo in dispositivos_guardar:
+            datos_guardar = seleccionar_dispositivo(df_día, dispositivo).copy()
+            if len(datos_guardar) != 96 + 2 * margen_temporal_h * 4: # Ñapa: 96 datos por día, más los de margen temporal
+                if dispositivo.id == disp_fallo.id:
+                    break # Si el dispositivo que ha fallado no tiene datos suficientes, no guarda nada.
+                else:
+                    continue # Si un dispositivo sano no tiene datos suficientes, lo ignora.
+            datos_guardar['id_caso'] = num_id_caso
+            datos_guardar['id_grupo_fallo'] = num_id_fallo
+            datos_guardar['planta'] = nom_planta
+            datos_guardar['pvet_id'] = dispositivo.id
+            datos_guardar['pvet_disp'] = str(dispositivo)
+            if dispositivo.id == disp_fallo.id:
+                # Si es el dispositivo que ha fallado, guarda los datos del fallo
+                datos_guardar['fallo'] = True
+                datos_guardar['tipo_fallo'] = tipo_fallo
+                datos_guardar['diag'] = diag_fallo
+                datos_guardar['diag_txt'] = diag_fallo_txt
+                datos_guardar['ini_fallo'] = ini_time
+                datos_guardar['fin_fallo'] = end_time
+                datos_guardar['duration'] = duración_fallo
+                datos_guardar['fallo_continuo'] = fallo_continuo
+                datos_guardar['ope_ck'] = fila['ope_ck']
+                # Ñapa para inventarse datos de operación
+                if False:
+                    tt = 0
+                    for t in datos_guardar.index:
+                        datos_guardar.loc[t, 'idc'] = tt * 1.5 / 96 * (1 + np.random.rand() * 0.1)
+                        datos_guardar.loc[t, 'vdc'] = tt * 0.75 / 96 * (1 + np.random.rand() * 0.1)
+                        datos_guardar.loc[t, 'pdc'] = tt * 1.125 / 96 * (1 + np.random.rand() * 0.1)
+                        tt += 1
+            else:
+                # Si es un dispositivo sano, guarda los datos como si no hubiera fallado
+                # En los numéricos pone ceros para evitar que luego se cargue como float
+                datos_guardar['fallo'] = False
+                datos_guardar['tipo_fallo'] = 'SANO'
+                datos_guardar['diag'] = 0
+                datos_guardar['diag_txt'] = 'NINGUNO'
+                datos_guardar['ini_fallo'] = ini_día
+                datos_guardar['fin_fallo'] = fin_día
+                datos_guardar['duration'] = 0
+                datos_guardar['fallo_continuo'] = False
+                datos_guardar['ope_ck'] = 0
+                # Ñapa para inventarse datos de operación
+                if False:
+                    tt = 0
+                    for t in datos_guardar.index:
+                        datos_guardar.loc[t, 'idc'] = tt * tt * 1.5 / 96 / 96 * (1 + np.random.rand() * 0.1)
+                        datos_guardar.loc[t, 'vdc'] = tt * tt * 0.75 / 96 / 96  * (1 + np.random.rand() * 0.1)
+                        datos_guardar.loc[t, 'pdc'] = tt * tt * 1.125 / 96 / 96  * (1 + np.random.rand() * 0.1)
+                        tt += 1
+            if df_casos is None:
+                df_casos = datos_guardar
+            else:
+                df_casos = pd.concat([df_casos, datos_guardar])
+            num_id_caso += 1
+            num_dispositivos_guardados += 1
+        if num_dispositivos_guardados > 0:
+            # Si se han guardado datos de algún dispositivo,
+            # guarda el promedio para cada instante del día como un caso más
+            datos_promedio = df_día.groupby('_time').mean()
+            datos_promedio['id_caso'] = num_id_caso
+            datos_promedio['id_grupo_fallo'] = num_id_fallo
+            datos_promedio['planta'] = nom_planta
+            datos_promedio['pvet_id'] = 0
+            datos_promedio['pvet_disp'] = 'Promedio'
+            datos_promedio['fallo'] = False
+            datos_promedio['tipo_fallo'] = 'PROMEDIO'
+            datos_promedio['diag'] = 0
+            datos_promedio['ini_fallo'] = ini_día
+            datos_promedio['fin_fallo'] = fin_día
+            datos_promedio['duration'] = 0
+            datos_promedio['fallo_continuo'] = False
+            datos_promedio['ope_ck'] = 0
+            df_casos = pd.concat([df_casos, datos_promedio])
+            num_id_caso += 1
+            num_id_fallo += 1 # Solo incrementa si se han guardado datos de algún dispositivo
+        num_fallo += 1
+        # Poner un valor más bajo para procesar solo unos pocos fallos
+        if num_fallo > 9999999:
+            break
+    return df_casos.sort_index()
+
+###################################################################
+
+def obtener_dispositivos_sanos(cliente_sql: ClientePostgres, disp_fallo: str) -> dict[int,PVET_id]:
+    """
+    Obtiene los dispositivos sanos de un tipo de fallo específico.
+    """
+    # Primero obtiene todos los dispositivos de ese tipo
+    consulta = f"SELECT * FROM PVET_ids WHERE Type = '{disp_fallo}'"
+    cursor = cliente_sql.obtener_cursor(consulta)
+    dispositivos_sanos = {}
+    for fila in cursor:
+        dispositivo = PVET_id(id=fila['id'], CT=fila['ct'], IN=fila['in'], TR=fila['tr'], SB=fila['sb'], ST=fila['st'], pos=fila['pos'], type=fila['type'])
+        dispositivos_sanos[dispositivo.id] = dispositivo
+
+    # Luego elimina los que tengan fallos registrados
+    consulta = f"SELECT DISTINCT ID FROM DDA_DIA WHERE Type = '{disp_fallo}'"
+    cursor = cliente_sql.obtener_cursor(consulta)
+    for fila in cursor:
+        del dispositivos_sanos[fila['id']]
+
+    return dispositivos_sanos
+
+###################################################################
+
+if __name__ == "__main__":
+    pass

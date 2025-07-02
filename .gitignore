@@ -3,3 +3,4 @@ __pycache__
 kk*
 params-influx.json
 params-mssql.json
+params-pgsql.json

@@ -12,7 +12,7 @@ from keras.layers import Conv1D, Dense, Dropout, Input, Concatenate, GlobalMaxPo
 from keras.models import Model, Sequential
 from keras.callbacks import EarlyStopping
 
-from dibujar_fallos import dibujar_fallo
+from dibujo_fallos import dibujar_fallo
 
 ###################################################################
 

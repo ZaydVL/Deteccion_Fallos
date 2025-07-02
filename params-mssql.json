@@ -1,6 +1,0 @@
-{
-	"MSSQL_SERVER"   : "eng-sqlserver.database.windows.net",
-	"MSSQL_PORT"     : "17333",
-	"MSSQL_USER"     : "PON AQUÍ EL USUARIO",
-	"MSSQL_PASSWORD" : "PON AQUÍ LA CONTRASEÑA"
-}
