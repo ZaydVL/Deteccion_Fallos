@@ -21,10 +21,10 @@ class Config:
 ###################################################################
 
 def procesar_argumentos(args) -> Config:
-    ''' Procesa los argumentos de la línea de comandos y devuelve un objeto Config.'''
+    ''' Procesa los argumentos de la línea de órdenes y devuelve un objeto Config.'''
     parser = argparse.ArgumentParser(description='Dibuja fallos.')
     parser.add_argument('--fich_datos', type=str, required=True, help='Fichero CSV con los datos de fallos')
-    parser.add_argument('--dir_png', type=str, required=True, help='Directorio donde se guardarán los gráficos generados')
+    parser.add_argument('--dir_png', type=str, required=False, help='Directorio donde se guardarán los gráficos generados (mismo que el CSV si no se especifica)')
 
     args = parser.parse_args(args)
 
@@ -36,16 +36,14 @@ def main1(args):
     ''' Dibuja los fallos del conjunto de datos especificado.'''
     config = procesar_argumentos(args)
     df_fallos = pd.read_csv(config.fich_datos, index_col=0, parse_dates=['_time', 'ini_fallo', 'fin_fallo'])
-    print(f'Número de casos obtenidos: {df_fallos["id_caso"].nunique()}, número de fallos: {df_fallos["id_grupo_fallo"].nunique()}')
-    dibujar_fallos(df_fallos, tipo_comparación='PROMEDIO', dir_ficheros=config.dir_png)
+    dir_png = config.dir_png if config.dir_png is not None else os.path.dirname(os.path.abspath(config.fich_datos))
+    print(f'Número de casos obtenidos: {df_fallos["id_caso"].nunique()}, número de fallos: {df_fallos["id_fallo"].nunique()}')
+    dibujar_fallos(df_fallos, tipo_comparación='PROMEDIO', dir_ficheros=dir_png)
 
 ###################################################################
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        #main2(sys.argv[1:])
-    #    main1(["sp10", "ST", "prueba-st"])
-        main1(["sp10", "IN", "kk/pe"])
-        #main1(["br03", "ST", "prueba-st"])
+        main1([ "--fich_datos", "prueba/fallos-IN.csv", "--dir_png", "prueba" ])
     else:
         main1(sys.argv[1:])

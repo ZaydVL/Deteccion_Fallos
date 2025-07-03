@@ -25,7 +25,7 @@ class Config:
 ###################################################################
 
 def procesar_argumentos(args) -> Config:
-    ''' Procesa los argumentos de la línea de comandos y devuelve un objeto Config.'''
+    ''' Procesa los argumentos de la línea de órdenes y devuelve un objeto Config.'''
     parser = argparse.ArgumentParser(description='Genera conjuntos de datos de fallos para una planta específica.')
     parser.add_argument('--planta', type=str, required=True, help='Nombre de la planta (p.e., sp10, br03)')
     parser.add_argument('--tipo_fallo', type=str, required=True, help='Tipo de fallo (p.e., ST, IN)')
@@ -58,18 +58,16 @@ def main1(args):
                 print(f'No se han encontrado fallos del tipo {tipo_fallo} en la planta {planta}.')
                 return
             df_fallos.to_csv(f'{dir_ficheros}/fallos-{tipo_fallo}.csv', date_format='%Y-%m-%d %H:%M:%S')
-            print(f'Número de casos obtenidos: {df_fallos["id_caso"].nunique()}, número de fallos: {df_fallos["id_grupo_fallo"].nunique()}')
+            print(f'Número de casos obtenidos: {df_fallos["id_caso"].nunique()}, número de fallos: {df_fallos["id_fallo"].nunique()}')
             pd.set_option('display.max_columns', None)
             pd.set_option('display.max_rows', None)
-            print(df_fallos.groupby('id_grupo_fallo')['pvet_disp'].value_counts())
+            print(df_fallos.info())
+            print(df_fallos.groupby('id_fallo')['pvet_disp'].value_counts())
 
 ###################################################################
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        #main2(sys.argv[1:])
-    #    main1(["sp10", "ST", "prueba-st"])
-        main1(["--planta", "sp10", "--tipo_fallo", "IN", "--dir_ficheros", "kk/prueba-kk"])
-        #main1(["br03", "ST", "prueba-st"])
+        main1(["--planta", "sp10", "--tipo_fallo", "IN", "--dir_ficheros", "prueba", "--margen_temporal", "0"])
     else:
         main1(sys.argv[1:])

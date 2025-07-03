@@ -175,7 +175,7 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
                 else:
                     continue # Si un dispositivo sano no tiene datos suficientes, lo ignora.
             datos_guardar['id_caso'] = num_id_caso
-            datos_guardar['id_grupo_fallo'] = num_id_fallo
+            datos_guardar['id_fallo'] = num_id_fallo
             datos_guardar['planta'] = nom_planta
             datos_guardar['pvet_id'] = dispositivo.id
             datos_guardar['pvet_disp'] = str(dispositivo)
@@ -229,7 +229,7 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
             # guarda el promedio para cada instante del día como un caso más
             datos_promedio = df_día.groupby('_time').mean()
             datos_promedio['id_caso'] = num_id_caso
-            datos_promedio['id_grupo_fallo'] = num_id_fallo
+            datos_promedio['id_fallo'] = num_id_fallo
             datos_promedio['planta'] = nom_planta
             datos_promedio['pvet_id'] = 0
             datos_promedio['pvet_disp'] = 'Promedio'

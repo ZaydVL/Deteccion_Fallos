@@ -28,14 +28,16 @@ campos_gráficas = {
     'ST' : [ 'idc' ]
 }
 
-def dibujar_fallo(df:pd.DataFrame, gráfica:plt.Axes, tipo_comparación:str, nom_fich_guardar_df=None):
-    id_caso_fallo = df['id_grupo_fallo'].iloc[0]
+def dibujar_fallo(df:pd.DataFrame, gráfica:plt.Axes, tipo_comparación:str=None, nom_fich_guardar_df=None):
+    '''Dibuja un fallo en la gráfica proporcionada y también otro caso sano para comparación.
+    Si se pasa "PROMEDIO" como tipo_comparación, se dibuja el caso promedio de los dispositivos sanos.
+    '''
+    id_caso_fallo = df['id_fallo'].iloc[0]
     datos_disp_fallo = df[df['fallo'] == True]
     disp_fallo = datos_disp_fallo['pvet_disp'].iloc[0]
     diag_fallo = datos_disp_fallo['diag'].iloc[0]
     diag_fallo_txt = datos_disp_fallo['diag_txt'].iloc[0]
-    #datos_disps_refer = df[df['fallo'] == False]
-    datos_disps_refer = df[df['tipo_fallo'] == tipo_comparación if tipo_comparación is not None else 'NINGUNO']
+    datos_disps_refer = df[df['tipo_fallo'] == (tipo_comparación if tipo_comparación is not None else 'NINGUNO')]
     if len(datos_disps_refer) > 0:
         id_disp_refer = datos_disps_refer['pvet_id'].iloc[0]
     else:
@@ -76,11 +78,11 @@ def dibujar_fallos(df_fallos: pd.DataFrame, tipo_comparación:str=None, dir_fich
     tam_fig_Y = 5 + 2.5 * (num_filas_gráficas - 1)
     num_gráfica = 0
     tipo_fallo = df_fallos['tipo_fallo'].iloc[0]
-    for id_grupo_fallo in df_fallos['id_grupo_fallo'].unique():
+    for id_fallo in df_fallos['id_fallo'].unique():
         if num_gráfica % num_gráficas == 0:
             figura, gráficas = plt.subplots(nrows=num_filas_gráficas, ncols=num_cols_gráficas, squeeze=False, figsize = (tam_fig_X, tam_fig_Y), subplot_kw={'visible':False})
             plt.subplots_adjust(left=0.15, wspace=0.3, hspace=0.4)
-        df_fallo = df_fallos[df_fallos["id_grupo_fallo"] == id_grupo_fallo]
+        df_fallo = df_fallos[df_fallos["id_fallo"] == id_fallo]
         if df_fallo[df_fallo['fallo'] == True].shape[0] > 0:
             dibujar_fallo(df_fallo, gráficas[(num_gráfica // num_cols_gráficas) % num_filas_gráficas, num_gráfica % num_cols_gráficas], tipo_comparación=tipo_comparación, nom_fich_guardar_df=f'csv/caso-fallo-{tipo_fallo}-{num_gráfica:03}.csv')
             num_gráfica += 1

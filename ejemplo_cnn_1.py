@@ -1,6 +1,8 @@
 # pip install keras tensorflow
 import sys
 import os
+import argparse
+
 os.environ["KERAS_BACKEND"] = "tensorflow"
 import keras
 import numpy as np
@@ -13,6 +15,27 @@ from keras.models import Model, Sequential
 from keras.callbacks import EarlyStopping
 
 from dibujo_fallos import dibujar_fallo
+
+depurar = True if "DEPURAR" in os.environ and os.environ["DEPURAR"].lower() == "true" else False
+
+class Config:
+
+    def __init__(self, fich_datos:str=None, dir_png:str=None):
+        ''' Clase para almacenar la configuración del script.'''
+        self.fich_datos = fich_datos
+        self.dir_png = dir_png
+
+###################################################################
+
+def procesar_argumentos(args) -> Config:
+    ''' Procesa los argumentos de la línea de órdenes y devuelve un objeto Config.'''
+    parser = argparse.ArgumentParser(description='Dibuja fallos.')
+    parser.add_argument('--fich_datos', type=str, required=True, help='Fichero CSV con los datos de fallos')
+    parser.add_argument('--dir_png', type=str, required=False, help='Directorio donde se guardarán los gráficos generados (mismo que el CSV si no se especifica)')
+
+    args = parser.parse_args(args)
+
+    return Config(fich_datos=args.fich_datos, dir_png=args.dir_png)
 
 ###################################################################
 
@@ -40,9 +63,13 @@ def extraer_xy_df(df):
     
     # Se queda con las columnas que son variables de operación
     var_entrada = set(df.columns)
-    var_entrada.difference_update([ 'ope_ck', 'st', 'in', 'PVET_id', 'id_grupo_fallo', 'tr', 'Diag', 'fallo_continuo', 'PVET_disp', 'sb', 'fin_fallo', 'ini_fallo', 'Duration', 'ct', 'tipo_fallo', 'planta', 'id_caso', 'fallo' ])
+    var_entrada.difference_update([ 'ope_ck', 'ct', 'in', 'tr', 'st', 'sb', 'pvet_id', 'pvet_disp', 'id_caso', 'id_fallo', 'diag', 'diag_txt', 'ini_fallo', 'fin_fallo', 'duration', 'fallo_continuo', 'tipo_fallo', 'planta', 'fallo' ])
+    # Elimina otras columnas que no son numéricas
+    var_entrada = [col for col in var_entrada if pd.api.types.is_numeric_dtype(df[col])]
     var_entrada = sorted(list(var_entrada))
-    print(f'Variables de entrada: {var_entrada}')
+    var_salida = 'fallo'
+    print(f'Variables de entrada: {var_entrada}') # Tienen que ser numéricas
+    print(f'Variable de salida: {var_salida}') # Variable categórica. En este caso 0 o 1 (no fallo o fallo)
     # var_entrada = [ 'pdc']
     X = None
     y = None
@@ -51,10 +78,10 @@ def extraer_xy_df(df):
         df_caso = df[df['id_caso'] == id_caso]
         if X is None:
             X = np.array([df_caso[var_entrada].values])
-            y = np.array([df_caso['fallo'].values[0]], dtype=int)
+            y = np.array([df_caso[var_salida].values[0]], dtype=int)
         else:
             X = np.concatenate((X, np.array([df_caso[var_entrada].values])), axis=0)
-            y = np.concatenate((y, np.array([df_caso['fallo'].values[0]], dtype=int)), axis=0)
+            y = np.concatenate((y, np.array([df_caso[var_salida].values[0]], dtype=int)), axis=0)
         id_casos.append(id_caso)
     return X, y, id_casos
 
@@ -120,7 +147,9 @@ def dibujar_historial(historia):
 
 def main1(args):
     keras.utils.set_random_seed(42)
-    nom_fich_datos = args[0]
+    config = procesar_argumentos(args)
+    nom_fich_datos = config.fich_datos
+    dir_png = config.dir_png if config.dir_png is not None else os.path.dirname(os.path.abspath(nom_fich_datos))
     df_fallos = pd.read_csv(nom_fich_datos, index_col=0, parse_dates=['_time', 'ini_fallo', 'fin_fallo'], on_bad_lines='error')
     print(df_fallos.info())
     # Elimina columnas que son completamente NaN
@@ -129,7 +158,7 @@ def main1(args):
     df_fallos = df_fallos.fillna(0)
     # Elimina columnas que son solo ceros
     df_fallos = df_fallos.loc[:, (df_fallos != 0).any(axis=0)]
-    print(f'Número de casos obtenidos: {df_fallos["id_caso"].nunique()}, número de fallos: {df_fallos["id_grupo_fallo"].nunique()}')
+    print(f'Número de casos obtenidos: {df_fallos["id_caso"].nunique()}, número de fallos: {df_fallos["id_fallo"].nunique()}')
     df_train, df_test = separar_df_train_test(df_fallos, frac_train=0.8)
     X_train, y_train, id_casos_train = extraer_xy_df(df_train)
     X_test, y_test, id_casos_test = extraer_xy_df(df_test)
@@ -151,32 +180,33 @@ def main1(args):
     predicciones = modelo.predict(X_test)
     for i in range(X_test.shape[0]):
         id_caso = id_casos_test[i]
+        id_fallo = df_test[df_test['id_caso'] == id_caso]['id_fallo'].iloc[0]
         clase_pred = np.argmax(predicciones[i])
         clase_real = y_test[i]
         confianza = predicciones[i][clase_pred] / predicciones[i][1-clase_pred]
-        print(f'Caso {i+1}: ID={id_caso}, Predicción: {clase_pred}, Real: {clase_real}, Probabilidades: {predicciones[i]}, Confianza: {confianza:.2f}')
+        print(f'Prueba {i+1}: ID={id_fallo}, Predicción: {clase_pred}, Real: {clase_real}, Probabilidades: {predicciones[i]}, Confianza: {confianza:.2f}')
         if clase_pred != clase_real or confianza < 1:
-            print(f'Caso {i+1} erróneo o de confianza reducida: ID={id_caso}, Predicción {clase_pred}, Real {clase_real}, Probabilidades: {predicciones[i]}, Confianza: {confianza:.2f}')
+            print(f'Prueba {i+1} erróneo o de confianza reducida: ID={id_fallo}, Predicción {clase_pred}, Real {clase_real}, Probabilidades: {predicciones[i]}, Confianza: {confianza:.2f}')
             figura, gráfica = plt.subplots(1, 1, figsize = (8, 8))
-            with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-                df = df_test[df_test['id_caso'] == id_caso]
+            #with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+                #df = df_test[df_test['id_caso'] == id_caso]
                 #print(df)
                 #print(df.info())
-            dibujar_fallo(df_test[df_test['id_caso'] == id_caso], gráfica)
+            #dibujar_fallo(df_test[df_test['id_caso'] == id_caso], gráfica, tipo_comparación='PROMEDIO')
+            dibujar_fallo(df_fallos[df_fallos['id_fallo'] == id_fallo], gráfica, tipo_comparación='PROMEDIO')
             plt.show()
 
 ###################################################################
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        # Si se pasan argumentos, se usa el primero como nombre del fichero
-        # de datos de fallos
-        # Ejemplo: python ejemplo_cnn_1.py pr1c/fallos-ST.csv
+        # Si se pasan argumentos en la línea de órdenes, pasa por aquí.
+        # Ejemplo: python ejemplo_cnn_1.py --fich_datos analisis/datos-sp44.csv
         main1(sys.argv[1:])
     else:
-        # Si no se pasan argumentos, se usa un fichero por defecto
-        # Ejemplo: python ejemplo_cnn_1.py
+        # Si no se pasan argumentos, pasa por aquí.
         # Esto es útil para pruebas rápidas sin necesidad de pasar argumentos
         # a la línea de órdenes.
+        # Ejemplo: python ejemplo_cnn_1.py
         # Aquí se puede cambiar el nombre del fichero por defecto si se desea.
-        main1(["prueba-st/fallos-ST.csv"])
+        main1(["--fich_datos", "prueba/fallos-IN.csv"])

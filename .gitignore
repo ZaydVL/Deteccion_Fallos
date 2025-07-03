@@ -4,3 +4,6 @@ kk*
 params-influx.json
 params-mssql.json
 params-pgsql.json
+pvet_ids*.jsonl
+*.png
+prueba*/
