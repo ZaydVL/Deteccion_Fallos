@@ -28,7 +28,7 @@ def procesar_argumentos(args) -> Config:
     ''' Procesa los argumentos de la línea de órdenes y devuelve un objeto Config.'''
     parser = argparse.ArgumentParser(description='Genera conjuntos de datos de fallos para una planta específica.')
     parser.add_argument('--planta', type=str, required=True, help='Nombre de la planta (p.e., sp10, br03)')
-    parser.add_argument('--tipo_fallo', type=str, required=True, help='Tipo de fallo (p.e., ST, IN)')
+    parser.add_argument('--tipo_fallo', type=str, required=True, help='Tipo de fallo (ST/IN/TR/SB/CT)')
     parser.add_argument('--dir_ficheros', type=str, required=True, help='Directorio donde se guardarán los ficheros generados')
     parser.add_argument('--margen_temporal', type=int, help='Margen temporal en horas para los datos de casos de fallo', nargs='?', default=0)
 
