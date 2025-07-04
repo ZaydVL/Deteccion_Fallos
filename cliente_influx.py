@@ -103,7 +103,8 @@ def mostrar_df(df:pd.DataFrame):
 
 def main1(args):
     nom_bu_influx = 'gsf-f0001'
-    cliente_influx = ClienteInflux('params-influx.json').conectar()
+    cliente_influx = ClienteInflux('params-influx.json')
+    cliente_influx.conectar()
     
     # Ejemplo: cargar todos los datos de las últimas 24h.
     df = cliente_influx.cargar_df(nom_bucket=nom_bu_influx, ini_periodo='-1d', nom_medida='m')
