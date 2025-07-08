@@ -38,9 +38,32 @@ def cargar_df(cliente_influx: ClienteInflux, nom_bucket: str, nom_medida, t_inic
     if depurar:
         print(f'CONSULTA INFLUX: {consulta}')
     df = cliente_influx.cargar_df(consulta=consulta)
-    for campo in [ 'ct', 'in', 'tr', 'sb', 'st' ]:
+    for campo in [ 'ct', 'in', 'tr', 'sb', 'st', 'pos' ]:
         if campo in df.columns:
             df[campo] = pd.to_numeric(df[campo])
+    df.index = df.index.tz_localize(None)
+    return df
+
+###################################################################
+
+def cargar_meteo(cliente_influx: ClienteInflux, nom_bucket: str, nom_medida, t_inicio, t_final) -> pd.DataFrame:
+    ''' Carga de InfluxDB los datos de una variable de operación entre dos fechas.'''
+    t_inicio = corregir_fecha(t_inicio)
+    t_final = corregir_fecha(t_final)
+    consulta = f'''
+        from(bucket:"{nom_bucket}") |>
+        range(start: {t_inicio}, stop: {t_final}) |>
+        filter(fn: (r) => (r["_measurement"] == "vop_ms" or r["_measurement"] == "vop_ms")) |>
+        pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")|> group()
+    '''
+    if depurar:
+        print(f'CONSULTA INFLUX: {consulta}')
+    df = cliente_influx.cargar_df(consulta=consulta)
+    for campo in [ 'ct', 'in', 'tr', 'sb', 'st', 'pos' ]:
+        if campo in df.columns:
+            df[campo] = pd.to_numeric(df[campo])
+    df = df.query('ct == 0 & pos == 0')
+    df = df.drop(columns=['ct', 'pos'])
     df.index = df.index.tz_localize(None)
     return df
 
@@ -89,7 +112,7 @@ def cargar_PVET_ids(cliente_sql: ClientePostgres, planta:str, usar_cache=False) 
 def seleccionar_dispositivo(df: pd.DataFrame, disp: PVET_id) -> pd.DataFrame:
     ''' Devuelve un DataFrame filtrado por el dispositivo indicado.'''
     consulta = ''
-    for campo in [ 'ct', 'in', 'tr', 'sb', 'st' ]:
+    for campo in [ 'ct', 'in', 'tr', 'sb', 'st', 'pos' ]:
         if campo in df.columns:
             if len(consulta) > 0:
                 consulta += ' & '
@@ -119,7 +142,6 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
     #cliente_sql.obtener_cursor(consulta, as_dict=False)
     cliente_sql.obtener_cursor(consulta)
     num_fallos = int(cliente_sql.leer_registro()['count'])
-    dispositivos_sanos = obtener_dispositivos_sanos(cliente_sql, tipo_fallo)
     # Obtiene todos los fallos validados de ese tipo
     consulta_sql = f""" SELECT * FROM {nom_tabla_fallos}
                         JOIN diagnosis ON {nom_tabla_fallos}.diag=diagnosis.code
@@ -136,7 +158,7 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
     df_casos = None
     num_id_fallo = num_id_caso = num_fallo = 1
     for fila in cursor:
-        print(f'{num_fallo}/{num_fallos} FALLOS')
+        print(f'{num_fallo}/{num_fallos} FALLOS', flush=True)
         ini_time = fila['ini_time']
         end_time = fila['end_time']
         id_dispositivo_fallo = fila['id']
@@ -147,15 +169,18 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
         fallo_continuo = (duración_fallo - 15) == ((end_time - ini_time).total_seconds() / 60)
 
         # Carga los datos de todos los dispositivos de ese día (00:00:00 a 23:59:59)
-        # Añade un margen temporal de N horas antes y después
+        # Añade un margen temporal de N horas antes
         ini_día = datetime(ini_time.year, ini_time.month, ini_time.day)
-        fin_día = datetime(ini_time.year, ini_time.month, ini_time.day) + timedelta(seconds=86399)
-        df_día = cargar_df(cliente_influx, nom_planta, tabla_disp, ini_día - timedelta(hours=margen_temporal_h), fin_día + timedelta(hours=margen_temporal_h))
+        fin_día = datetime(ini_time.year, ini_time.month, ini_time.day) + timedelta(days=1, seconds=-1)
+        df_día = cargar_df(cliente_influx, nom_planta, tabla_disp, ini_día - timedelta(hours=margen_temporal_h), fin_día)
+        df_meteo = cargar_meteo(cliente_influx, nom_planta, None, ini_día - timedelta(hours=margen_temporal_h), fin_día)
+        df_día = df_día.join(df_meteo, how='outer', rsuffix='_meteo')
 
         # Ahora va a guardar los datos del dispositivo que ha fallado y de varios sanos
         disp_fallo = PVET_ids[id_dispositivo_fallo]
         dispositivos_guardar = [ disp_fallo ]
         # Escoge varios dispositivos sanos al azar. Intenta que sean 5, pero a veces hay menos.
+        dispositivos_sanos = obtener_dispositivos_sanos(cliente_sql, tipo_fallo, fecha_fallo=ini_día.strftime('%Y-%m-%d'))
         num_disp_sanos = min(5, len(dispositivos_sanos))
         ids_dispositivos_sanos = random.sample(list(dispositivos_sanos.keys()), num_disp_sanos)
         for i in ids_dispositivos_sanos:
@@ -248,24 +273,30 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
         # Poner un valor más bajo para procesar solo unos pocos fallos
         if num_fallo > 9999999:
             break
-    return df_casos.sort_index()
+    return df_casos.sort_index() if df_casos is not None else None
 
 ###################################################################
 
-def obtener_dispositivos_sanos(cliente_sql: ClientePostgres, disp_fallo: str) -> dict[int,PVET_id]:
+def obtener_dispositivos_sanos(cliente_sql: ClientePostgres, disp_fallo: str, fecha_fallo:str=None) -> dict[int,PVET_id]:
     """
     Obtiene los dispositivos sanos de un tipo de fallo específico.
     """
     # Primero obtiene todos los dispositivos de ese tipo
     consulta = f"SELECT * FROM PVET_ids WHERE Type = '{disp_fallo}'"
+    if depurar:
+        print(f'CONSULTA SQL: {consulta}')
     cursor = cliente_sql.obtener_cursor(consulta)
     dispositivos_sanos = {}
     for fila in cursor:
         dispositivo = PVET_id(id=fila['id'], CT=fila['ct'], IN=fila['in'], TR=fila['tr'], SB=fila['sb'], ST=fila['st'], pos=fila['pos'], type=fila['type'])
         dispositivos_sanos[dispositivo.id] = dispositivo
 
-    # Luego elimina los que tengan fallos registrados
+    # Luego elimina los que tengan fallos registrados, opcionalmente filtrando por fecha
     consulta = f"SELECT DISTINCT ID FROM DDA_DIA WHERE Type = '{disp_fallo}'"
+    if fecha_fallo:
+        consulta += f" AND date = '{fecha_fallo}'"
+    if depurar:
+        print(f'CONSULTA SQL: {consulta}')
     cursor = cliente_sql.obtener_cursor(consulta)
     for fila in cursor:
         del dispositivos_sanos[fila['id']]

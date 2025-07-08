@@ -6,6 +6,7 @@ keras
 tensorflow
 # Para dibujar modelos
 pydot
+graphviz
 
 numpy
 pandas

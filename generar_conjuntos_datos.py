@@ -68,6 +68,6 @@ def main1(args):
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        main1(["--planta", "sp10", "--tipo_fallo", "IN", "--dir_ficheros", "prueba", "--margen_temporal", "0"])
+        main1(["--planta", "rd02", "--tipo_fallo", "IN", "--dir_ficheros", "prueba/rd02", "--margen_temporal", "0"])
     else:
         main1(sys.argv[1:])

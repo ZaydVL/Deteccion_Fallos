@@ -15,6 +15,7 @@ from keras.models import Model, Sequential
 from keras.callbacks import EarlyStopping
 
 from dibujo_fallos import dibujar_fallo
+from sklearn.metrics import classification_report, confusion_matrix
 
 depurar = True if "DEPURAR" in os.environ and os.environ["DEPURAR"].lower() == "true" else False
 
@@ -40,16 +41,28 @@ def procesar_argumentos(args) -> Config:
 ###################################################################
 
 def separar_df_train_test(df_fallos, frac_train=0.8):
-    """Separa los datos de fallos en conjuntos de entrenamiento y prueba."""
-    id_casos = df_fallos['id_caso'].unique()
-    np.random.shuffle(id_casos)
-    n_train = int(len(id_casos) * frac_train)
-    train_ids = id_casos[:n_train]
-    test_ids = id_casos[n_train:]
-    df_train_ids = df_fallos['id_caso'].isin(train_ids)
-    df_test_ids = df_fallos['id_caso'].isin(test_ids)
-    df_train = df_fallos[df_train_ids]
-    df_test = df_fallos[df_test_ids]
+    """Separa los datos de fallos en conjuntos de entrenamiento y prueba.
+    Se asegura de que ambos conjuntos tengan al menos un fallo.
+    Si no, reduce el porcentaje de entrenamiento hasta un mínimo del 50%."""
+    min_frac_train = 0.5
+    separar = True
+    while separar and frac_train >= min_frac_train:
+        id_casos = df_fallos['id_caso'].unique()
+        np.random.shuffle(id_casos)
+        n_train = int(len(id_casos) * frac_train)
+        train_ids = id_casos[:n_train]
+        test_ids = id_casos[n_train:]
+        df_train_ids = df_fallos['id_caso'].isin(train_ids)
+        df_test_ids = df_fallos['id_caso'].isin(test_ids)
+        df_train = df_fallos[df_train_ids]
+        df_test = df_fallos[df_test_ids]
+        if df_train['fallo'].sum() == 0 or df_test['fallo'].sum() == 0:
+            frac_train -= 0.05
+            if frac_train < min_frac_train:
+                print('No se puede separar el conjunto de datos en entrenamiento y prueba con suficientes fallos.')
+                return None, None
+        else:
+            separar = False
     print(f'Número de casos de entrenamiento: {df_train["id_caso"].nunique()}, número de fallos: {df_train.loc[df_train["fallo"], "id_caso"].nunique()}')
     print(f'Número de casos de prueba: {df_test["id_caso"].nunique()}, número de fallos: {df_test.loc[df_test["fallo"], "id_caso"].nunique()}')
     return df_train, df_test
@@ -121,7 +134,7 @@ def entrenar_modelo(modelo, X_train, y_train, X_test, y_test, epochs=200, batch_
 
 ###################################################################
 
-def dibujar_historial(historia):
+def dibujar_historial(historia, dir_png=None):
     """Dibuja el historial de entrenamiento del modelo."""
     plt.figure(figsize=(12, 6))
     plt.subplot(1, 2, 1)
@@ -141,7 +154,13 @@ def dibujar_historial(historia):
     plt.legend()
 
     plt.tight_layout()
-    plt.show()
+
+    if dir_png is not None:
+        if not os.path.exists(dir_png):
+            os.makedirs(dir_png)
+        plt.savefig(f'{dir_png}/historial_entrenamiento.png')
+    else:
+        plt.show()
 
 ###################################################################
 
@@ -158,43 +177,74 @@ def main1(args):
     df_fallos = df_fallos.fillna(0)
     # Elimina columnas que son solo ceros
     df_fallos = df_fallos.loc[:, (df_fallos != 0).any(axis=0)]
-    print(f'Número de casos obtenidos: {df_fallos["id_caso"].nunique()}, número de fallos: {df_fallos["id_fallo"].nunique()}')
-    df_train, df_test = separar_df_train_test(df_fallos, frac_train=0.8)
-    X_train, y_train, id_casos_train = extraer_xy_df(df_train)
-    X_test, y_test, id_casos_test = extraer_xy_df(df_test)
+    df_fallos_base = df_fallos.copy()
 
-    scaler = keras.utils.normalize
-    X_train = scaler(X_train, axis=1)
-    X_test = scaler(X_test, axis=1)
+    for diag in df_fallos_base['diag'].unique():
+        if diag == 0:
+            continue
+        id_fallos = df_fallos_base[df_fallos_base['diag'] == diag]['id_fallo'].unique()
+        df_fallos = df_fallos_base[df_fallos_base['id_fallo'].isin(id_fallos)]
+        diag_txt = df_fallos_base[df_fallos_base['diag'] == diag]['diag_txt'].unique()[0]
+        print(f'Número de casos con diagnóstico {diag}/{diag_txt}: {df_fallos[df_fallos["diag"] == diag]["id_caso"].nunique()}')
+        num_casos = df_fallos['id_caso'].nunique()
+        num_fallos = df_fallos['id_fallo'].nunique()
+        print(f'Número de casos obtenidos: {num_casos}, número de fallos: {num_fallos}')
+        if num_casos < 2 or num_fallos < 2:
+            print(f'No hay suficientes casos o fallos para entrenar un modelo. Número de casos: {num_casos}, número de fallos: {num_fallos}')
+            return
+        df_train, df_test = separar_df_train_test(df_fallos, frac_train=0.8)
+        X_train, y_train, id_casos_train = extraer_xy_df(df_train)
+        X_test, y_test, id_casos_test = extraer_xy_df(df_test)
 
-    modelo = crear_modelo(X_train.shape, num_clases=len(np.unique(y_train)))
-    print(modelo.summary())
-    keras.utils.plot_model(modelo, show_shapes=True)
+        scaler = keras.utils.normalize
+        X_train = scaler(X_train, axis=1)
+        X_test = scaler(X_test, axis=1)
 
-    historia = entrenar_modelo(modelo, X_train, y_train, X_test, y_test)
-    dibujar_historial(historia)
+        modelo = crear_modelo(X_train.shape, num_clases=len(np.unique(y_train)))
+        print(modelo.summary())
+        keras.utils.plot_model(modelo, show_shapes=True, to_file=f'{dir_png}/modelo.png')
 
-    loss, accuracy = modelo.evaluate(X_test, y_test)
-    print(f'Loss: {loss}, Accuracy: {accuracy}')
+        historia = entrenar_modelo(modelo, X_train, y_train, X_test, y_test)
+        dibujar_historial(historia, dir_png)
 
-    predicciones = modelo.predict(X_test)
-    for i in range(X_test.shape[0]):
-        id_caso = id_casos_test[i]
-        id_fallo = df_test[df_test['id_caso'] == id_caso]['id_fallo'].iloc[0]
-        clase_pred = np.argmax(predicciones[i])
-        clase_real = y_test[i]
-        confianza = predicciones[i][clase_pred] / predicciones[i][1-clase_pred]
-        print(f'Prueba {i+1}: ID={id_fallo}, Predicción: {clase_pred}, Real: {clase_real}, Probabilidades: {predicciones[i]}, Confianza: {confianza:.2f}')
-        if clase_pred != clase_real or confianza < 1:
-            print(f'Prueba {i+1} erróneo o de confianza reducida: ID={id_fallo}, Predicción {clase_pred}, Real {clase_real}, Probabilidades: {predicciones[i]}, Confianza: {confianza:.2f}')
-            figura, gráfica = plt.subplots(1, 1, figsize = (8, 8))
-            #with pd.option_context('display.max_rows', None, 'display.max_columns', None):
-                #df = df_test[df_test['id_caso'] == id_caso]
-                #print(df)
-                #print(df.info())
-            #dibujar_fallo(df_test[df_test['id_caso'] == id_caso], gráfica, tipo_comparación='PROMEDIO')
-            dibujar_fallo(df_fallos[df_fallos['id_fallo'] == id_fallo], gráfica, tipo_comparación='PROMEDIO')
-            plt.show()
+        loss, accuracy = modelo.evaluate(X_test, y_test)
+        print(f'Loss: {loss}, Accuracy: {accuracy}')
+
+        predicciones = modelo.predict(X_test)
+        y_pred = np.argmax(predicciones, axis=1)
+        print("Matriz de confusión:")
+        print(confusion_matrix(y_test, y_pred))
+        print("\nMétricas relevantes:")
+        print(classification_report(y_test, y_pred, digits=3))
+        # Guardar matriz de confusión y métricas relevantes en CSV
+        conf_matrix = confusion_matrix(y_test, y_pred)
+        conf_matrix_df = pd.DataFrame(conf_matrix)
+        conf_matrix_df.to_csv(f"{dir_png}/matriz_confusion.csv", index=False)
+
+        report_dict = classification_report(y_test, y_pred, digits=3, output_dict=True)
+        report_df = pd.DataFrame(report_dict).transpose()
+        report_df.to_csv(f"{dir_png}/metricas.csv")
+
+        for i in range(X_test.shape[0]):
+            id_caso = id_casos_test[i]
+            id_fallo = df_test[df_test['id_caso'] == id_caso]['id_fallo'].iloc[0]
+            diag_fallo_txt = df_test[df_test['id_caso'] == id_caso]['diag_txt'].iloc[0]
+            clase_pred = np.argmax(predicciones[i])
+            clase_real = y_test[i]
+            confianza = predicciones[i][clase_pred] / predicciones[i][1-clase_pred]
+            print(f'Prueba {i+1}: ID={id_fallo}, Diag={diag_fallo_txt}, Predicción: {clase_pred}, Real: {clase_real}, Probabilidades: {predicciones[i]}, Confianza: {confianza:.2f}')
+            if clase_pred != clase_real or confianza < 1:
+                print(f'Prueba {i+1} erróneo o de confianza reducida: ID={id_fallo}, Diag={diag_fallo_txt}, Predicción {clase_pred}, Real {clase_real}, Probabilidades: {predicciones[i]}, Confianza: {confianza:.2f}')
+                figura, gráfica = plt.subplots(1, 1, figsize = (8, 8))
+                #with pd.option_context('display.max_rows', None, 'display.max_columns', None):
+                    #df = df_test[df_test['id_caso'] == id_caso]
+                    #print(df)
+                    #print(df.info())
+                #dibujar_fallo(df_test[df_test['id_caso'] == id_caso], gráfica, tipo_comparación='PROMEDIO')
+                dibujar_fallo(df_fallos[df_fallos['id_fallo'] == id_fallo], gráfica, tipo_comparación='PROMEDIO')
+                plt.savefig(f'{dir_png}/fallo-{id_fallo}.png', dpi=300)
+                #plt.show()
+        print('\n' * 5)
 
 ###################################################################
 
@@ -209,4 +259,4 @@ if __name__ == "__main__":
         # a la línea de órdenes.
         # Ejemplo: python ejemplo_cnn_1.py
         # Aquí se puede cambiar el nombre del fichero por defecto si se desea.
-        main1(["--fich_datos", "prueba/fallos-IN.csv"])
+        main1(["--fich_datos", "prueba/rd02/fallos-IN.csv"])

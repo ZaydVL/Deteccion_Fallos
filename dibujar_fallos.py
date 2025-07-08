@@ -44,6 +44,6 @@ def main1(args):
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        main1([ "--fich_datos", "prueba/fallos-IN.csv", "--dir_png", "prueba" ])
+        main1([ "--fich_datos", "prueba/rd02/fallos-IN.csv", "--dir_png", "prueba" ])
     else:
         main1(sys.argv[1:])
