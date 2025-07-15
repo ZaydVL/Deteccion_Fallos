@@ -69,6 +69,7 @@ def cargar_meteo(cliente_influx: ClienteInflux, nom_bucket: str, nom_medida, t_i
 
 ###################################################################
 
+# Los campos CT/IN..POS están en mayúsculas porque IN no puede ser minúsculas (palabra reservada Python)
 @dataclass
 class PVET_id:
     id: int
@@ -77,11 +78,11 @@ class PVET_id:
     TR: int
     SB: int
     ST: int
-    pos: int
+    POS: int
     type: int
 
     def __str__(self):
-        return f'D{self.id}:CT{self.CT}/IN{self.IN}/TR{self.TR}/SB{self.SB}/ST{self.ST}'
+        return f'D{self.id}:CT{self.CT}/IN{self.IN}/TR{self.TR}/SB{self.SB}/ST{self.ST}/POS{self.POS}/type{self.type}'
 
 PVET_ids = {}
 
@@ -99,7 +100,7 @@ def cargar_PVET_ids(cliente_sql: ClientePostgres, planta:str, usar_cache=False) 
         consulta_sql = f"SELECT * FROM PVET_ids"
         cursor = cliente_sql.obtener_cursor(consulta_sql)
         for fila in cursor:
-            elem = PVET_id(id=fila['id'], CT=fila['ct'], IN=fila['in'], TR=fila['tr'], SB=fila['sb'], ST=fila['st'], pos=fila['pos'], type=fila['type'])
+            elem = PVET_id(id=fila['id'], CT=fila['ct'], IN=fila['in'], TR=fila['tr'], SB=fila['sb'], ST=fila['st'], POS=fila['pos'], type=fila['type'])
             PVET_ids[elem.id] = elem
         if usar_cache:
             with open(nom_fich_pvet_ids, 'w') as f:
@@ -288,7 +289,7 @@ def obtener_dispositivos_sanos(cliente_sql: ClientePostgres, disp_fallo: str, fe
     cursor = cliente_sql.obtener_cursor(consulta)
     dispositivos_sanos = {}
     for fila in cursor:
-        dispositivo = PVET_id(id=fila['id'], CT=fila['ct'], IN=fila['in'], TR=fila['tr'], SB=fila['sb'], ST=fila['st'], pos=fila['pos'], type=fila['type'])
+        dispositivo = PVET_id(id=fila['id'], CT=fila['ct'], IN=fila['in'], TR=fila['tr'], SB=fila['sb'], ST=fila['st'], POS=fila['pos'], type=fila['type'])
         dispositivos_sanos[dispositivo.id] = dispositivo
 
     # Luego elimina los que tengan fallos registrados, opcionalmente filtrando por fecha

@@ -52,7 +52,7 @@ def main1(args):
         os.makedirs(dir_ficheros)
     with ClientePostgres(nom_bd_pgsql, 'params-pgsql.json') as cliente_postgres:
         with ClienteInflux('params-influx.json') as cliente_influx:
-            cargar_PVET_ids(cliente_postgres, planta, usar_cache=True)
+            cargar_PVET_ids(cliente_postgres, planta, usar_cache=False)
             df_fallos = obtener_datos_casos(cliente_postgres, cliente_influx, nom_bu_influx, tipo_disp, f'vop_{tipo_disp}'.lower(), margen_temporal_h=config.margen_temporal_h)
             if df_fallos is None:
                 print(f'No se han encontrado fallos del tipo {tipo_disp} en la planta {planta}.')
@@ -68,6 +68,6 @@ def main1(args):
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        main1(["--planta", "rd02", "--tipo_disp", "IN", "--dir_ficheros", "prueba/rd02", "--margen_temporal", "0"])
+        main1(["--planta", "sp08", "--tipo_disp", "TR", "--dir_ficheros", "prueba/sp08", "--margen_temporal", "0"])
     else:
         main1(sys.argv[1:])
