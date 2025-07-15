@@ -133,19 +133,19 @@ def escoger_otro_dispositivo(PVET_ids, disp_fallo: PVET_id):
 
 ###################################################################
 
-def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflux, nom_planta:str, tipo_fallo:str, tabla_disp:str, margen_temporal_h:int=0) -> pd.DataFrame:
+def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflux, nom_planta:str, tipo_disp:str, tabla_disp:str, margen_temporal_h:int=0) -> pd.DataFrame:
     ''' Devuelve un DataFrame con los datos de cada fallo y de varios dispositivos sanos.
     '''
     nom_tabla_fallos = 'DDA_DIA'
-    tabla_disp = f'vop_{tipo_fallo}'.lower()
-    consulta = f"SELECT COUNT(*) FROM {nom_tabla_fallos} WHERE Type = '{tipo_fallo}' AND ope_ck = 1"
+    tabla_disp = f'vop_{tipo_disp}'.lower()
+    consulta = f"SELECT COUNT(*) FROM {nom_tabla_fallos} WHERE Type = '{tipo_disp}' AND ope_ck = 1"
     #cliente_sql.obtener_cursor(consulta, as_dict=False)
     cliente_sql.obtener_cursor(consulta)
     num_fallos = int(cliente_sql.leer_registro()['count'])
     # Obtiene todos los fallos validados de ese tipo
     consulta_sql = f""" SELECT * FROM {nom_tabla_fallos}
                         JOIN diagnosis ON {nom_tabla_fallos}.diag=diagnosis.code
-                        WHERE Type = '{tipo_fallo}' AND ope_ck = 1
+                        WHERE Type = '{tipo_disp}' AND ope_ck = 1
                         ORDER BY diag,Duration DESC"""
     if depurar:
         print(f'CONSULTA SQL: {consulta_sql}')
@@ -180,7 +180,7 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
         disp_fallo = PVET_ids[id_dispositivo_fallo]
         dispositivos_guardar = [ disp_fallo ]
         # Escoge varios dispositivos sanos al azar. Intenta que sean 5, pero a veces hay menos.
-        dispositivos_sanos = obtener_dispositivos_sanos(cliente_sql, tipo_fallo, fecha_fallo=ini_día.strftime('%Y-%m-%d'))
+        dispositivos_sanos = obtener_dispositivos_sanos(cliente_sql, tipo_disp, fecha_fallo=ini_día.strftime('%Y-%m-%d'))
         num_disp_sanos = min(5, len(dispositivos_sanos))
         ids_dispositivos_sanos = random.sample(list(dispositivos_sanos.keys()), num_disp_sanos)
         for i in ids_dispositivos_sanos:
@@ -207,7 +207,7 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
             if dispositivo.id == disp_fallo.id:
                 # Si es el dispositivo que ha fallado, guarda los datos del fallo
                 datos_guardar['fallo'] = True
-                datos_guardar['tipo_fallo'] = tipo_fallo
+                datos_guardar['tipo_disp'] = tipo_disp
                 datos_guardar['diag'] = diag_fallo
                 datos_guardar['diag_txt'] = diag_fallo_txt
                 datos_guardar['ini_fallo'] = ini_time
@@ -227,7 +227,7 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
                 # Si es un dispositivo sano, guarda los datos como si no hubiera fallado
                 # En los numéricos pone ceros para evitar que luego se cargue como float
                 datos_guardar['fallo'] = False
-                datos_guardar['tipo_fallo'] = 'SANO'
+                datos_guardar['tipo_disp'] = 'SANO'
                 datos_guardar['diag'] = 0
                 datos_guardar['diag_txt'] = 'NINGUNO'
                 datos_guardar['ini_fallo'] = ini_día
@@ -259,7 +259,7 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
             datos_promedio['pvet_id'] = 0
             datos_promedio['pvet_disp'] = 'Promedio'
             datos_promedio['fallo'] = False
-            datos_promedio['tipo_fallo'] = 'PROMEDIO'
+            datos_promedio['tipo_disp'] = 'PROMEDIO'
             datos_promedio['diag'] = 0
             datos_promedio['ini_fallo'] = ini_día
             datos_promedio['fin_fallo'] = fin_día

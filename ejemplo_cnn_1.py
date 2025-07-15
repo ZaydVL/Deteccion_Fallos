@@ -76,7 +76,7 @@ def extraer_xy_df(df):
     
     # Se queda con las columnas que son variables de operación
     var_entrada = set(df.columns)
-    var_entrada.difference_update([ 'ope_ck', 'ct', 'in', 'tr', 'st', 'sb', 'pvet_id', 'pvet_disp', 'id_caso', 'id_fallo', 'diag', 'diag_txt', 'ini_fallo', 'fin_fallo', 'duration', 'fallo_continuo', 'tipo_fallo', 'planta', 'fallo' ])
+    var_entrada.difference_update([ 'ope_ck', 'ct', 'in', 'tr', 'st', 'sb', 'pvet_id', 'pvet_disp', 'id_caso', 'id_fallo', 'diag', 'diag_txt', 'ini_fallo', 'fin_fallo', 'duration', 'fallo_continuo', 'tipo_disp', 'planta', 'fallo' ])
     # Elimina otras columnas que no son numéricas
     var_entrada = [col for col in var_entrada if pd.api.types.is_numeric_dtype(df[col])]
     var_entrada = sorted(list(var_entrada))

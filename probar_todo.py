@@ -41,23 +41,23 @@ def main1(args):
     dir_ficheros = 'prueba' if config.dir_ficheros is None else config.dir_ficheros
     config.margen_temporal_h
     for planta in plantas:
-        for tipo_fallo in tipos_fallo:
+        for tipo_disp in tipos_fallo:
             dir_ficheros_planta = f'{dir_ficheros}/{planta}'
-            print(f'Generando datos de fallos para la planta {planta} y tipo de fallo {tipo_fallo}...', flush=True)
+            print(f'Generando datos de fallos para la planta {planta} y tipo de fallo {tipo_disp}...', flush=True)
             generar_conjuntos_datos.main1([
                 '--planta', planta,
-                '--tipo_fallo', tipo_fallo,
+                '--tipo_disp', tipo_disp,
                 '--dir_ficheros', dir_ficheros_planta,
                 '--margen_temporal', str(config.margen_temporal_h)
             ])
             continue
-            if os.path.exists(f'{dir_ficheros_planta}/fallos-{tipo_fallo}.csv'):
+            if os.path.exists(f'{dir_ficheros_planta}/fallos-{tipo_disp}.csv'):
                 dibujar_fallos.main1([
-                    '--fich_datos', f'{dir_ficheros_planta}/fallos-{tipo_fallo}.csv',
+                    '--fich_datos', f'{dir_ficheros_planta}/fallos-{tipo_disp}.csv',
                     '--dir_png', dir_ficheros
                 ])
                 ejemplo_cnn_1.main1([
-                    '--fich_datos', f'{dir_ficheros_planta}/fallos-{tipo_fallo}.csv',
+                    '--fich_datos', f'{dir_ficheros_planta}/fallos-{tipo_disp}.csv',
                     '--dir_png', dir_ficheros
                 ])
  

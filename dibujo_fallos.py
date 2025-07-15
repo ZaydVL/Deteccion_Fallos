@@ -37,7 +37,7 @@ def dibujar_fallo(df:pd.DataFrame, gráfica:plt.Axes, tipo_comparación:str=None
     disp_fallo = datos_disp_fallo['pvet_disp'].iloc[0]
     diag_fallo = datos_disp_fallo['diag'].iloc[0]
     diag_fallo_txt = datos_disp_fallo['diag_txt'].iloc[0]
-    datos_disps_refer = df[df['tipo_fallo'] == (tipo_comparación if tipo_comparación is not None else 'NINGUNO')]
+    datos_disps_refer = df[df['tipo_disp'] == (tipo_comparación if tipo_comparación is not None else 'NINGUNO')]
     if len(datos_disps_refer) > 0:
         id_disp_refer = datos_disps_refer['pvet_id'].iloc[0]
     else:
@@ -48,8 +48,8 @@ def dibujar_fallo(df:pd.DataFrame, gráfica:plt.Axes, tipo_comparación:str=None
     end_time = datos_disp_fallo['fin_fallo'].iloc[0]
     if end_time == ini_time:
         end_time = ini_time + timedelta(minutes=15)
-    tipo_fallo = datos_disp_fallo['tipo_fallo'].iloc[0]
-    campos_interés = campos_gráficas[tipo_fallo]
+    tipo_disp = datos_disp_fallo['tipo_disp'].iloc[0]
+    campos_interés = campos_gráficas[tipo_disp]
     formato_x = mdates.DateFormatter('%H:%M')
     gráfica.xaxis.set_major_formatter(formato_x)
     gráfica.tick_params(axis='both', labelsize=8)
@@ -77,21 +77,21 @@ def dibujar_fallos(df_fallos: pd.DataFrame, tipo_comparación:str=None, dir_fich
     tam_fig_X = 7 + 3.5 * (num_cols_gráficas - 1)
     tam_fig_Y = 5 + 2.5 * (num_filas_gráficas - 1)
     num_gráfica = 0
-    tipo_fallo = df_fallos['tipo_fallo'].iloc[0]
+    tipo_disp = df_fallos['tipo_disp'].iloc[0]
     for id_fallo in df_fallos['id_fallo'].unique():
         if num_gráfica % num_gráficas == 0:
             figura, gráficas = plt.subplots(nrows=num_filas_gráficas, ncols=num_cols_gráficas, squeeze=False, figsize = (tam_fig_X, tam_fig_Y), subplot_kw={'visible':False})
             plt.subplots_adjust(left=0.15, wspace=0.3, hspace=0.4)
         df_fallo = df_fallos[df_fallos["id_fallo"] == id_fallo]
         if df_fallo[df_fallo['fallo'] == True].shape[0] > 0:
-            dibujar_fallo(df_fallo, gráficas[(num_gráfica // num_cols_gráficas) % num_filas_gráficas, num_gráfica % num_cols_gráficas], tipo_comparación=tipo_comparación, nom_fich_guardar_df=f'csv/caso-fallo-{tipo_fallo}-{num_gráfica:03}.csv')
+            dibujar_fallo(df_fallo, gráficas[(num_gráfica // num_cols_gráficas) % num_filas_gráficas, num_gráfica % num_cols_gráficas], tipo_comparación=tipo_comparación, nom_fich_guardar_df=f'csv/caso-fallo-{tipo_disp}-{num_gráfica:03}.csv')
             num_gráfica += 1
             if num_gráfica % num_gráficas == 0:
     #            plt.show(block=False)
-                plt.savefig(f'{dir_ficheros}/fallos-{tipo_fallo}-{num_gráfica // num_gráficas}.png', dpi=300)
+                plt.savefig(f'{dir_ficheros}/fallos-{tipo_disp}-{num_gráfica // num_gráficas}.png', dpi=300)
     if num_gráfica % num_gráficas != 0:
 #        plt.show(block=False)
-        plt.savefig(f'{dir_ficheros}/fallos-{tipo_fallo}-{num_gráfica // num_gráficas + 1}.png', dpi=300)
+        plt.savefig(f'{dir_ficheros}/fallos-{tipo_disp}-{num_gráfica // num_gráficas + 1}.png', dpi=300)
 
 ###################################################################
 
