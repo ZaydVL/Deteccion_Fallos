@@ -2,6 +2,7 @@ import os
 from datetime import datetime,timedelta
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
 
@@ -19,7 +20,7 @@ def corregir_fecha(fecha):
 
 ###################################################################
 
-campos_gráficas = {
+campos_gráficas_por_tipo = {
 #    'SB' : [ 'vdc', 'idc', 'pdc' ],
 #    'IN' : [ 'vdc', 'idc', 'pdc' ],
     'SB' : [ 'idc' ],
@@ -28,15 +29,34 @@ campos_gráficas = {
     'ST' : [ 'idc' ]
 }
 
+campos_gráficas_por_diag = {
+    201 : [ 'vdc', 'idc', 'pdc' ],             # String abierto (ST)
+    202 : [ 'vdc', 'idc', 'pdc' ],             # Diodo defectuoso (ST)
+    221 : [ 'vdc', 'idc', 'pdc' ],             # Stringbox abierto
+    222 : [ 'vdc', 'idc', 'pdc' ],             # String abierto (SB)
+    241 : [ 'vdc', 'idc', 'pdc' ],             # Parada de inversor
+    242 : [ 'vdc', 'idc', 'pdc' ],             # Fallo MPPT
+    245 : [ 'temp_pot', 'temp_cab', 'pdc' ],   # MPPT Temperatura
+    246 : [ 'temp_pot', 'temp_cab', 'pdc'  ],  # MPPT VDC
+    260 : [ 'pos' ],                           # Posición bandera
+    265 : [ 'pos' ],                           # Posición máxima no alcanzada
+    343 : [ 'temp_pot', 'temp_cab', 'pdc' ],   # Temperatura anómala cabina
+    345 : [ 'temp_pot', 'temp_cab', 'pdc' ],   # Temperatura anómala potencia
+    0 :   [ 'pdc', 'pos' ]                     # Cualquier otro
+}
+
 def dibujar_fallo(df:pd.DataFrame, gráfica:plt.Axes, tipo_comparación:str=None, comentario=None, nom_fich_guardar_df=None):
     '''Dibuja un fallo en la gráfica proporcionada y también otro caso sano para comparación.
     Si se pasa "PROMEDIO" como tipo_comparación, se dibuja el caso promedio de los dispositivos sanos.
     '''
+
+    # Obtiene diversas informaciones generales sobre el fallo
     id_caso_fallo = df['id_fallo'].iloc[0]
     datos_disp_fallo = df[df['fallo'] == True]
     disp_fallo = datos_disp_fallo['pvet_disp'].iloc[0]
     diag_fallo = datos_disp_fallo['diag'].iloc[0]
     diag_fallo_txt = datos_disp_fallo['diag_txt'].iloc[0]
+    tipo_disp = datos_disp_fallo['tipo_disp'].iloc[0]
     datos_disps_refer = df[df['tipo_disp'] == (tipo_comparación if tipo_comparación is not None else 'NINGUNO')]
     if len(datos_disps_refer) > 0:
         id_disp_refer = datos_disps_refer['pvet_id'].iloc[0]
@@ -47,41 +67,74 @@ def dibujar_fallo(df:pd.DataFrame, gráfica:plt.Axes, tipo_comparación:str=None
     ini_time = datos_disp_fallo['ini_fallo'].iloc[0]
     end_time = datos_disp_fallo['fin_fallo'].iloc[0]
     if end_time == ini_time:
-        end_time = ini_time + timedelta(minutes=15)
-    tipo_disp = datos_disp_fallo['tipo_disp'].iloc[0]
-    campos_interés = campos_gráficas[tipo_disp]
+        end_time = ini_time + timedelta(minutes=15) # Para que al menos sea un intervalo
+
+    # Obtiene los campos que se dibujarán y descarta los que no estén en los datos
+    campos_interés = campos_gráficas_por_diag[diag_fallo] if diag_fallo in campos_gráficas_por_diag else campos_gráficas_por_diag[0]
+    campos_interés = [c for c in campos_interés if c in datos_disp_fallo.columns]
+
+    # Prepara la gráfica
     formato_x = mdates.DateFormatter('%H:%M')
     gráfica.xaxis.set_major_formatter(formato_x)
     gráfica.tick_params(axis='both', labelsize=8)
     gráfica.tick_params(axis='x', rotation=45)
+
+    # Si hay campos cuyo valor máximo difiere bastante con respecto a otros,
+    # usa dos gráficas: una para los valores pequeños y otra para los grandes.
+    gráfica1 = gráfica
+    gráfica2 = None
+    gráfica_campo = {} # https://matplotlib.org/stable/gallery/subplots_axes_and_figures/two_scales.html
     for v in campos_interés:
-        gráfica.plot(datos_disp_fallo.index, datos_disp_fallo[v], label=f'{v} F', color='red')
+        if len(gráfica_campo) == 0:
+            máx_ref = max(1,abs(datos_disp_fallo[v].max()))
+            g = gráfica1
+        else:
+            máx_v = max(1, abs(datos_disp_fallo[v].max()))
+            if máx_ref / máx_v > 5 or máx_v / máx_ref > 5:
+                if gráfica2 is None:
+                    gráfica2 = gráfica1.twinx()
+                g = gráfica2
+        gráfica_campo[v] = g
+
+    colores = list(mcolors.TABLEAU_COLORS.keys()) # https://matplotlib.org/stable/gallery/color/named_colors.html
+    for v in campos_interés:
+        g = gráfica_campo[v]
+        color = colores.pop(0) # Coge un color para cada variable (supone que habrá suficientes para ir sacando)
+        # Dibuja la variable del dispositivo en fallo con línea punteada.
+        g.plot(datos_disp_fallo.index, datos_disp_fallo[v], '--', label=f'{v} F',color=color)
         # Selecciona las filas cuyo índice está entre ini_time y end_time (aunque no existan exactamente esos timestamps)
+        # Las dibuja encima con puntos gordos, para que se vean claramente.
         máscara_t = (datos_disp_fallo.index >= ini_time) & (datos_disp_fallo.index <= end_time)
-        gráfica.plot(datos_disp_fallo.index[máscara_t], datos_disp_fallo.loc[máscara_t, v], 'o--', color='red')
-    if not datos_disp_refer.empty:
-        for v in campos_interés:
-            gráfica.plot(datos_disp_refer.index, datos_disp_refer[v], label=v, color='blue')
+        g.plot(datos_disp_fallo.index[máscara_t], datos_disp_fallo.loc[máscara_t, v], 'o--', color=color)
+        # Si se compara con otro dispositivo, dibuja su variable con línea continua
+        if not datos_disp_refer.empty:
+            g.plot(datos_disp_refer.index, datos_disp_refer[v], '-', label=v, color=color)
+
+    # Termina poniendo título, leyenda, etc.
     título = f'Caso {id_caso_fallo}, {disp_fallo}, {ini_time.strftime("%Y-%m-%d")}\n{diag_fallo_txt}'
     if comentario is not None:
         título = f'{título}\n{comentario}'
-    gráfica.set_title(título, fontsize=8)
-    gráfica.set_visible(True)
-    gráfica.legend()
+    gráfica1.set_title(título, fontsize=8)
+    gráfica1.set_visible(True)
+    gráfica1.legend()
+    if gráfica2 is not None:
+        gráfica2.legend()
 
 ###################################################################
 
 def dibujar_fallos(df_fallos: pd.DataFrame, tipo_comparación:str=None, dir_ficheros='png'):
     if not os.path.exists(dir_ficheros):
         os.makedirs(dir_ficheros)
-    num_filas_gráficas = 3
-    num_cols_gráficas = 4
+    num_filas_gráficas = 2
+    num_cols_gráficas = 2
     num_gráficas = num_filas_gráficas * num_cols_gráficas
     tam_fig_X = 7 + 3.5 * (num_cols_gráficas - 1)
     tam_fig_Y = 5 + 2.5 * (num_filas_gráficas - 1)
     num_gráfica = 0
     tipo_disp = df_fallos['tipo_disp'].iloc[0]
-    for id_fallo in df_fallos['id_fallo'].unique():
+    # Ordena los id_fallo por diagnóstico
+    id_fallo_ordenado = df_fallos[df_fallos['diag'] != 0].groupby(['id_fallo', 'diag']).size().reset_index().sort_values('diag')['id_fallo'].values
+    for id_fallo in id_fallo_ordenado:
         if num_gráfica % num_gráficas == 0:
             figura, gráficas = plt.subplots(nrows=num_filas_gráficas, ncols=num_cols_gráficas, squeeze=False, figsize = (tam_fig_X, tam_fig_Y), subplot_kw={'visible':False})
             plt.subplots_adjust(left=0.15, wspace=0.3, hspace=0.4)
@@ -92,9 +145,11 @@ def dibujar_fallos(df_fallos: pd.DataFrame, tipo_comparación:str=None, dir_fich
             if num_gráfica % num_gráficas == 0:
     #            plt.show(block=False)
                 plt.savefig(f'{dir_ficheros}/fallos-{tipo_disp}-{num_gráfica // num_gráficas}.png', dpi=300)
+                plt.close()
     if num_gráfica % num_gráficas != 0:
 #        plt.show(block=False)
         plt.savefig(f'{dir_ficheros}/fallos-{tipo_disp}-{num_gráfica // num_gráficas + 1}.png', dpi=300)
+        plt.close()
 
 ###################################################################
 
