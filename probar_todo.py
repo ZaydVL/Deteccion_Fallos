@@ -58,7 +58,7 @@ def main1(args):
                 ])
                 ejemplo_cnn_1.main1([
                     '--fich_datos', f'{dir_ficheros_planta}/fallos-{tipo_disp}.csv',
-                    '--dir_png', dir_ficheros
+                    '--dir_resultados', dir_ficheros
                 ])
  
 ###################################################################

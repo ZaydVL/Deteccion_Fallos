@@ -28,7 +28,7 @@ campos_gráficas = {
     'ST' : [ 'idc' ]
 }
 
-def dibujar_fallo(df:pd.DataFrame, gráfica:plt.Axes, tipo_comparación:str=None, nom_fich_guardar_df=None):
+def dibujar_fallo(df:pd.DataFrame, gráfica:plt.Axes, tipo_comparación:str=None, comentario=None, nom_fich_guardar_df=None):
     '''Dibuja un fallo en la gráfica proporcionada y también otro caso sano para comparación.
     Si se pasa "PROMEDIO" como tipo_comparación, se dibuja el caso promedio de los dispositivos sanos.
     '''
@@ -62,7 +62,10 @@ def dibujar_fallo(df:pd.DataFrame, gráfica:plt.Axes, tipo_comparación:str=None
     if not datos_disp_refer.empty:
         for v in campos_interés:
             gráfica.plot(datos_disp_refer.index, datos_disp_refer[v], label=v, color='blue')
-    gráfica.set_title(f'Caso {id_caso_fallo}, {disp_fallo}, {ini_time.strftime("%Y-%m-%d")}\n{diag_fallo_txt}', fontsize=8)
+    título = f'Caso {id_caso_fallo}, {disp_fallo}, {ini_time.strftime("%Y-%m-%d")}\n{diag_fallo_txt}'
+    if comentario is not None:
+        título = f'{título}\n{comentario}'
+    gráfica.set_title(título, fontsize=8)
     gráfica.set_visible(True)
     gráfica.legend()
 
