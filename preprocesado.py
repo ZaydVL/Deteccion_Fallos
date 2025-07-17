@@ -180,9 +180,9 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
         # Ahora va a guardar los datos del dispositivo que ha fallado y de varios sanos
         disp_fallo = PVET_ids[id_dispositivo_fallo]
         dispositivos_guardar = [ disp_fallo ]
-        # Escoge varios dispositivos sanos al azar. Intenta que sean 5, pero a veces hay menos.
+        # Escoge varios dispositivos sanos al azar. Intenta que sean una cierta cantidad mínima, pero a veces hay menos.
         dispositivos_sanos = obtener_dispositivos_sanos(cliente_sql, tipo_disp, fecha_fallo=ini_día.strftime('%Y-%m-%d'))
-        num_disp_sanos = min(5, len(dispositivos_sanos))
+        num_disp_sanos = min(500, len(dispositivos_sanos))
         ids_dispositivos_sanos = random.sample(list(dispositivos_sanos.keys()), num_disp_sanos)
         for i in ids_dispositivos_sanos:
             dispositivos_guardar.append(dispositivos_sanos[i])
@@ -205,45 +205,15 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
             datos_guardar['planta'] = nom_planta
             datos_guardar['pvet_id'] = dispositivo.id
             datos_guardar['pvet_disp'] = str(dispositivo)
-            if dispositivo.id == disp_fallo.id:
-                # Si es el dispositivo que ha fallado, guarda los datos del fallo
-                datos_guardar['fallo'] = True
-                datos_guardar['tipo_disp'] = tipo_disp
-                datos_guardar['diag'] = diag_fallo
-                datos_guardar['diag_txt'] = diag_fallo_txt
-                datos_guardar['ini_fallo'] = ini_time
-                datos_guardar['fin_fallo'] = end_time
-                datos_guardar['duration'] = duración_fallo
-                datos_guardar['fallo_continuo'] = fallo_continuo
-                datos_guardar['ope_ck'] = fila['ope_ck']
-                # Ñapa para inventarse datos de operación
-                if False:
-                    tt = 0
-                    for t in datos_guardar.index:
-                        datos_guardar.loc[t, 'idc'] = tt * 1.5 / 96 * (1 + np.random.rand() * 0.1)
-                        datos_guardar.loc[t, 'vdc'] = tt * 0.75 / 96 * (1 + np.random.rand() * 0.1)
-                        datos_guardar.loc[t, 'pdc'] = tt * 1.125 / 96 * (1 + np.random.rand() * 0.1)
-                        tt += 1
-            else:
-                # Si es un dispositivo sano, guarda los datos como si no hubiera fallado
-                # En los numéricos pone ceros para evitar que luego se cargue como float
-                datos_guardar['fallo'] = False
-                datos_guardar['tipo_disp'] = 'SANO'
-                datos_guardar['diag'] = 0
-                datos_guardar['diag_txt'] = 'NINGUNO'
-                datos_guardar['ini_fallo'] = ini_día
-                datos_guardar['fin_fallo'] = fin_día
-                datos_guardar['duration'] = 0
-                datos_guardar['fallo_continuo'] = False
-                datos_guardar['ope_ck'] = 0
-                # Ñapa para inventarse datos de operación
-                if False:
-                    tt = 0
-                    for t in datos_guardar.index:
-                        datos_guardar.loc[t, 'idc'] = tt * tt * 1.5 / 96 / 96 * (1 + np.random.rand() * 0.1)
-                        datos_guardar.loc[t, 'vdc'] = tt * tt * 0.75 / 96 / 96  * (1 + np.random.rand() * 0.1)
-                        datos_guardar.loc[t, 'pdc'] = tt * tt * 1.125 / 96 / 96  * (1 + np.random.rand() * 0.1)
-                        tt += 1
+            datos_guardar['tipo_disp'] = tipo_disp
+            datos_guardar['diag'] = diag_fallo
+            datos_guardar['diag_txt'] = diag_fallo_txt
+            datos_guardar['ini_fallo'] = ini_time
+            datos_guardar['fin_fallo'] = end_time
+            datos_guardar['duration'] = duración_fallo
+            datos_guardar['fallo_continuo'] = fallo_continuo
+            datos_guardar['ope_ck'] = fila['ope_ck']
+            datos_guardar['fallo'] = (dispositivo.id == disp_fallo.id)
             if df_casos is None:
                 df_casos = datos_guardar
             else:
@@ -258,15 +228,16 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
             datos_promedio['id_fallo'] = num_id_fallo
             datos_promedio['planta'] = nom_planta
             datos_promedio['pvet_id'] = 0
-            datos_promedio['pvet_disp'] = 'Promedio'
+            datos_promedio['pvet_disp'] = 'PROMEDIO'
+            datos_promedio['tipo_disp'] = tipo_disp
+            datos_promedio['diag'] = diag_fallo
+            datos_promedio['diag_txt'] = diag_fallo_txt
+            datos_promedio['ini_fallo'] = ini_time
+            datos_promedio['fin_fallo'] = end_time
+            datos_promedio['duration'] = duración_fallo
+            datos_promedio['fallo_continuo'] = fallo_continuo
+            datos_promedio['ope_ck'] = fila['ope_ck']
             datos_promedio['fallo'] = False
-            datos_promedio['tipo_disp'] = 'PROMEDIO'
-            datos_promedio['diag'] = 0
-            datos_promedio['ini_fallo'] = ini_día
-            datos_promedio['fin_fallo'] = fin_día
-            datos_promedio['duration'] = 0
-            datos_promedio['fallo_continuo'] = False
-            datos_promedio['ope_ck'] = 0
             df_casos = pd.concat([df_casos, datos_promedio])
             num_id_caso += 1
             num_id_fallo += 1 # Solo incrementa si se han guardado datos de algún dispositivo

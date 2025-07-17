@@ -57,13 +57,19 @@ def dibujar_fallo(df:pd.DataFrame, gráfica:plt.Axes, tipo_comparación:str=None
     diag_fallo = datos_disp_fallo['diag'].iloc[0]
     diag_fallo_txt = datos_disp_fallo['diag_txt'].iloc[0]
     tipo_disp = datos_disp_fallo['tipo_disp'].iloc[0]
-    datos_disps_refer = df[df['tipo_disp'] == (tipo_comparación if tipo_comparación is not None else 'NINGUNO')]
-    if len(datos_disps_refer) > 0:
-        id_disp_refer = datos_disps_refer['pvet_id'].iloc[0]
+    datos_disp_refer = None
+    if tipo_comparación is not None:
+        datos_disp_refer = df[df['pvet_disp'].str.lower() == tipo_comparación.lower()]
+    else:
+        # Si no se especifica tipo_comparación, coge el primer dispositivo sano.
+        pvet_ids_refer = df[(df['fallo'] == False) & (df['pvet_id'] > 0)]['pvet_id'].unique()
+        if len(pvet_ids_refer) > 0:
+            datos_disp_refer = df[df['pvet_id'] == pvet_ids_refer[0]]
+    if datos_disp_refer is not None and len(datos_disp_refer) > 0:
+        disp_refer = datos_disp_refer['pvet_disp'].iloc[0]
     else:
         # Ocasionalmente no hay datos de dispositivos sanos
-        id_disp_refer = -1
-    datos_disp_refer = datos_disps_refer[datos_disps_refer['pvet_id'] == id_disp_refer]
+        disp_refer = 'NO'
     ini_time = datos_disp_fallo['ini_fallo'].iloc[0]
     end_time = datos_disp_fallo['fin_fallo'].iloc[0]
     if end_time == ini_time:
@@ -107,11 +113,11 @@ def dibujar_fallo(df:pd.DataFrame, gráfica:plt.Axes, tipo_comparación:str=None
         máscara_t = (datos_disp_fallo.index >= ini_time) & (datos_disp_fallo.index <= end_time)
         g.plot(datos_disp_fallo.index[máscara_t], datos_disp_fallo.loc[máscara_t, v], 'o--', color=color)
         # Si se compara con otro dispositivo, dibuja su variable con línea continua
-        if not datos_disp_refer.empty:
+        if datos_disp_refer is not None and not datos_disp_refer.empty:
             g.plot(datos_disp_refer.index, datos_disp_refer[v], '-', label=v, color=color)
 
     # Termina poniendo título, leyenda, etc.
-    título = f'Fallo {id_fallo}, {disp_fallo}, {ini_time.strftime("%Y-%m-%d")}\n{diag_fallo_txt}'
+    título = f'Fallo {id_fallo}, {diag_fallo_txt}, {ini_time.strftime("%Y-%m-%d")}\nF={disp_fallo}\nC={disp_refer}'
     if comentario is not None:
         título = f'{título}\n{comentario}'
     gráfica1.set_title(título, fontsize=8)
