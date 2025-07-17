@@ -103,6 +103,7 @@ def dibujar_historial(historia, patrón_ficheros=None):
         plt.savefig(f'{patrón_ficheros}-historial_entrenamiento.png')
     else:
         plt.show()
+    plt.close()
 
 ###################################################################
 
@@ -115,10 +116,11 @@ def cargar_datos(config):
     df_fallos = df_fallos.fillna(0)
     # Elimina columnas que son solo ceros
     df_fallos = df_fallos.loc[:, (df_fallos != 0).any(axis=0)]
-    # Se queda solo con una cierta cantidad máxima de casos sanos para cada fallo.
+    # Se queda solo con una cierta cantidad máxima de casos sanos para cada fallo,
+    # más todos los que sean sintéticos (promedio..., tienen pvet_id = 0)
     max_num_casos_sanos = 5
     for id_fallo in df_fallos['id_fallo'].unique():
-        id_casos_sanos = df_fallos.query(f'(id_fallo == {id_fallo}) & (~ fallo)')['id_caso'].unique()
+        id_casos_sanos = df_fallos.query(f'(id_fallo == {id_fallo}) & (~ fallo) & pvet_id > 0')['id_caso'].unique()
         if len(id_casos_sanos) > max_num_casos_sanos:
             id_casos_sanos_a_eliminar = id_casos_sanos[max_num_casos_sanos:]
             df_fallos = df_fallos[~df_fallos['id_caso'].isin(id_casos_sanos_a_eliminar)]
@@ -237,4 +239,5 @@ def evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros):
                 dibujar_fallo(df_fallos[df_fallos['id_fallo'] == id_fallo], gráfica, comentario=comentario, tipo_comparación='PROMEDIO')
                 plt.savefig(f'{patrón_ficheros}-fallo-{id_fallo}.png', dpi=300)
                 #plt.show()
+                plt.close()
         df_info_pruebas.to_csv(f"{patrón_ficheros}-info-pruebas.csv", index=False)
