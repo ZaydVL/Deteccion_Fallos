@@ -51,7 +51,7 @@ def dibujar_fallo(df:pd.DataFrame, gráfica:plt.Axes, tipo_comparación:str=None
     '''
 
     # Obtiene diversas informaciones generales sobre el fallo
-    id_caso_fallo = df['id_fallo'].iloc[0]
+    id_fallo = df['id_fallo'].iloc[0]
     datos_disp_fallo = df[df['fallo'] == True]
     disp_fallo = datos_disp_fallo['pvet_disp'].iloc[0]
     diag_fallo = datos_disp_fallo['diag'].iloc[0]
@@ -111,7 +111,7 @@ def dibujar_fallo(df:pd.DataFrame, gráfica:plt.Axes, tipo_comparación:str=None
             g.plot(datos_disp_refer.index, datos_disp_refer[v], '-', label=v, color=color)
 
     # Termina poniendo título, leyenda, etc.
-    título = f'Caso {id_caso_fallo}, {disp_fallo}, {ini_time.strftime("%Y-%m-%d")}\n{diag_fallo_txt}'
+    título = f'Fallo {id_fallo}, {disp_fallo}, {ini_time.strftime("%Y-%m-%d")}\n{diag_fallo_txt}'
     if comentario is not None:
         título = f'{título}\n{comentario}'
     gráfica1.set_title(título, fontsize=8)
