@@ -7,3 +7,5 @@ params-pgsql.json
 pvet_ids*.jsonl
 *.png
 prueba*/
+.vscode/
+.ipynb_checkpoints/

@@ -89,6 +89,8 @@ PVET_ids = {}
 def cargar_PVET_ids(cliente_sql: ClientePostgres, planta:str, usar_cache=False) -> dict[int,PVET_id]:
     ''' Carga los identificadores de los dispositivos PVET desde la base de datos SQL.
     Si usar_cache es True, intenta cargar los datos desde un fichero JSONL.'''
+    if len(PVET_ids) > 0:
+        PVET_ids.clear()  # Limpia el diccionario si ya hay datos cargados
     nom_fich_pvet_ids = f'pvet_ids-{planta}.jsonl'
     if usar_cache and os.path.exists(nom_fich_pvet_ids):
         with open(nom_fich_pvet_ids, 'r') as f:
@@ -134,19 +136,25 @@ def escoger_otro_dispositivo(PVET_ids, disp_fallo: PVET_id):
 
 ###################################################################
 
-def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflux, nom_planta:str, tipo_disp:str, tabla_disp:str, margen_temporal_h:int=0) -> pd.DataFrame:
+def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflux, nom_planta:str, tipo_disp:str, diag_interés=None, margen_temporal_h:int=0) -> pd.DataFrame:
     ''' Devuelve un DataFrame con los datos de cada fallo y de varios dispositivos sanos.
     '''
     nom_tabla_fallos = 'DDA_DIA'
     tabla_disp = f'vop_{tipo_disp}'.lower()
-    consulta = f"SELECT COUNT(*) FROM {nom_tabla_fallos} WHERE Type = '{tipo_disp}' AND ope_ck = 1"
+    filtro_interés = f"Type = '{tipo_disp}' AND ope_ck = 1"
+    if diag_interés is not None:
+        if isinstance(diag_interés, int):
+            filtro_interés += f" AND diag = {diag_interés}"
+        elif isinstance(diag_interés, list):
+            filtro_interés += f" AND diag IN ({','.join(map(str, diag_interés))})"
+    consulta = f"SELECT COUNT(*) FROM {nom_tabla_fallos} WHERE {filtro_interés}"
     #cliente_sql.obtener_cursor(consulta, as_dict=False)
     cliente_sql.obtener_cursor(consulta)
     num_fallos = int(cliente_sql.leer_registro()['count'])
     # Obtiene todos los fallos validados de ese tipo
     consulta_sql = f""" SELECT * FROM {nom_tabla_fallos}
                         JOIN diagnosis ON {nom_tabla_fallos}.diag=diagnosis.code
-                        WHERE Type = '{tipo_disp}' AND ope_ck = 1
+                        WHERE {filtro_interés}
                         ORDER BY diag,Duration DESC"""
     if depurar:
         print(f'CONSULTA SQL: {consulta_sql}')

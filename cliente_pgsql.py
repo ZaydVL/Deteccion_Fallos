@@ -8,7 +8,7 @@ from datetime import datetime,timedelta
 
 class ClientePostgres:
 
-    def __init__(self, basedatos:str, fich_params:str=None):
+    def __init__(self, fich_params:str=None, basedatos:str=''):
         self.params = self.__obtener_params_entorno()
         if fich_params is not None:
             params2 = self.__obtener_params_fichero(fich_params)

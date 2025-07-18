@@ -3,7 +3,8 @@
 
 import sys
 import os
-import argparse
+import config_global
+CONFIG = config_global.ConfigGlobal()
 
 import numpy as np
 import pandas as pd
@@ -11,63 +12,73 @@ from cliente_influx import ClienteInflux
 from cliente_pgsql import ClientePostgres
 from preprocesado import cargar_PVET_ids, obtener_datos_casos
 
-depurar = True if "DEPURAR" in os.environ and os.environ["DEPURAR"].lower() == "true" else False
-
-class Config:
-
-    def __init__(self, planta=None, tipo_disp=None, dir_ficheros=None, margen_temporal_h=0):
-        ''' Clase para almacenar la configuración del script.'''
-        self.planta = planta
-        self.tipo_disp = tipo_disp
-        self.dir_ficheros = dir_ficheros
-        self.margen_temporal_h = margen_temporal_h
-
-###################################################################
-
-def procesar_argumentos(args) -> Config:
-    ''' Procesa los argumentos de la línea de órdenes y devuelve un objeto Config.'''
-    parser = argparse.ArgumentParser(description='Genera conjuntos de datos de fallos para una planta específica.')
-    parser.add_argument('--planta', type=str, required=True, help='Nombre de la planta (p.e., sp10, br03)')
-    parser.add_argument('--tipo_disp', type=str, required=True, help='Tipo de fallo (ST/IN/TR/SB/CT)')
-    parser.add_argument('--dir_ficheros', type=str, required=True, help='Directorio donde se guardarán los ficheros generados')
-    parser.add_argument('--margen_temporal', type=int, help='Margen temporal en horas para los datos de casos de fallo', nargs='?', default=0)
-
-    args = parser.parse_args(args)
-    
-    return Config(planta=args.planta, tipo_disp=args.tipo_disp, dir_ficheros=args.dir_ficheros, margen_temporal_h=args.margen_temporal)
-
 ###################################################################
 
 def main1(args):
-    ''' Genera un conjunto de casos de fallo para una planta específica.
+    ''' Genera un conjunto de casos de fallo para las plantas indicadas en la configuración.
     En cada caso aparece el dispositivo que ha fallado y varios más sanos.
-    Los datos se guardan en un directorio especificado.'''
-    config = procesar_argumentos(args)
-    planta = config.planta
-    nom_bd_pgsql = f'pvet-{planta}'
-    nom_bu_influx = f'pvet-{planta}'
-    tipo_disp = config.tipo_disp
-    dir_ficheros = config.dir_ficheros
-    if not os.path.exists(dir_ficheros):
-        os.makedirs(dir_ficheros)
-    with ClientePostgres(nom_bd_pgsql, 'params-pgsql.json') as cliente_postgres:
+    Los datos se guardan en un directorio configurable.'''
+    config_global.ConfigGlobal(args[0])
+    fich_salida = CONFIG.fich_salida
+    dir_salida = os.path.dirname(fich_salida)
+    if dir_salida and not os.path.exists(dir_salida):
+        os.makedirs(dir_salida)
+    diag_interés_conf = CONFIG.diags if hasattr(CONFIG, 'diags') else None
+    guardar_por = 'tipo_disp' if '{tipo_disp}' in fich_salida else 'planta' if '{planta}' in fich_salida else 'total'
+    df_fallos_total = None
+    with ClientePostgres('params-pgsql.json') as cliente_postgres:
         with ClienteInflux('params-influx.json') as cliente_influx:
-            cargar_PVET_ids(cliente_postgres, planta, usar_cache=False)
-            df_fallos = obtener_datos_casos(cliente_postgres, cliente_influx, nom_bu_influx, tipo_disp, f'vop_{tipo_disp}'.lower(), margen_temporal_h=config.margen_temporal_h)
-            if df_fallos is None:
-                print(f'No se han encontrado fallos del tipo {tipo_disp} en la planta {planta}.')
-                return
-            df_fallos.to_csv(f'{dir_ficheros}/fallos-{tipo_disp}.csv', date_format='%Y-%m-%d %H:%M:%S')
-            print(f'Número de casos obtenidos: {df_fallos["id_caso"].nunique()}, número de fallos: {df_fallos["id_fallo"].nunique()}')
-            pd.set_option('display.max_columns', None)
-            pd.set_option('display.max_rows', None)
-            print(df_fallos.info())
-            print(df_fallos.groupby('id_fallo')['pvet_disp'].value_counts())
+            for planta in CONFIG.plantas:
+                df_fallos_planta = None
+                nom_bd_pgsql = f'pvet-{planta}'
+                nom_bu_influx = f'pvet-{planta}'
+                cliente_postgres.conectar(nom_bd_pgsql)
+                cargar_PVET_ids(cliente_postgres, planta, usar_cache=False)
+                for tipo_disp in CONFIG.tipos_disp:
+                    diag_interés = diag_interés_conf.get(tipo_disp, None) if diag_interés_conf is not None and isinstance(diag_interés_conf, dict) else diag_interés_conf
+                    diag_interés_txt = 'Todos' if diag_interés is None else str(diag_interés)
+                    print(f'\n\nBuscando fallos del tipo {tipo_disp} en la planta {planta}, diags={diag_interés_txt} ...')
+                    df_fallos = obtener_datos_casos(cliente_postgres, cliente_influx, nom_bu_influx, tipo_disp, diag_interés=diag_interés, margen_temporal_h=CONFIG.margen_temporal_h)
+                    if df_fallos is None:
+                        print(f'No se han encontrado fallos del tipo {tipo_disp} con diags={diag_interés_txt} en la planta {planta}.')
+                    else:
+                        print(f'Planta {planta}, tipo disp {tipo_disp}, diags={diag_interés_txt}: Número de casos obtenidos: {df_fallos["id_caso"].nunique()}, número de fallos: {df_fallos["id_fallo"].nunique()}')
+                        if guardar_por == 'tipo_disp':
+                            fich_salida_parcial = fich_salida.replace('{tipo_disp}', tipo_disp)
+                            fich_salida_parcial = fich_salida_parcial.replace('{planta}', planta)
+                            print(f'Guardando datos en {fich_salida_parcial}')
+                            df_fallos.to_csv(fich_salida_parcial, date_format='%Y-%m-%d %H:%M:%S')
+                        elif guardar_por == 'planta':
+                            if df_fallos_planta is None:
+                                df_fallos_planta = df_fallos
+                            else:
+                                df_fallos_planta = pd.concat([df_fallos_planta, df_fallos])
+                        else:                        
+                            if df_fallos_total is None:
+                                df_fallos_total = df_fallos
+                            else:
+                                df_fallos_total = pd.concat([df_fallos_total, df_fallos])
+                if guardar_por == 'planta':
+                    if df_fallos_planta is not None:
+                        fich_salida_parcial = fich_salida.replace('{planta}', planta)
+                        print(f'Guardando datos en {fich_salida_parcial}')
+                        df_fallos_planta.to_csv(fich_salida_parcial, date_format='%Y-%m-%d %H:%M:%S')
+    if guardar_por == 'total':
+        if df_fallos_total is not None:
+            print(f'Guardando datos en {fich_salida}')
+            df_fallos_total.to_csv(f'{fich_salida}', date_format='%Y-%m-%d %H:%M:%S')
+    print('\n' * 5)
+    if df_fallos_total is not None:
+        print(f'Número TOTAL de casos obtenidos: {df_fallos_total["id_caso"].nunique()}, número de fallos: {df_fallos_total["id_fallo"].nunique()}')
+        pd.set_option('display.max_columns', None)
+        pd.set_option('display.max_rows', None)
+        print(df_fallos_total.info())
+        print(df_fallos_total.groupby('id_fallo')['pvet_disp'].value_counts())
 
 ###################################################################
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        main1(["--planta", "sp08", "--tipo_disp", "TR", "--dir_ficheros", "prueba/sp08", "--margen_temporal", "0"])
+        main1(["config/config_gen1.py"])
     else:
         main1(sys.argv[1:])
