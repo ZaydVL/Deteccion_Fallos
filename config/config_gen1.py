@@ -33,4 +33,5 @@ fich_salida = 'datos/prueba1.csv'
 # Margen temporal en horas para los datos de casos de fallo.
 margen_temporal_h = 0
 
-
+# Número máximo de dispositivos sanos por cada dispositivo en fallo
+max_disp_sanos_por_fallo = 5
