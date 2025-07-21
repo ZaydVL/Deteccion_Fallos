@@ -86,6 +86,10 @@ class ConfigGlobal:
                 componentes = fich_config.split('/')
                 fich_config = componentes[-1]
                 _dir_config = '/'.join(componentes[:-1])
+            elif '\\' in fich_config:
+                componentes = fich_config.split('\\')
+                fich_config = componentes[-1]
+                _dir_config = '\\'.join(componentes[:-1])
             if _dir_config is not None:
                 sys.path.append(_dir_config)
             config = importlib.import_module(fich_config)
