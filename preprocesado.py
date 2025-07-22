@@ -7,6 +7,7 @@ import pandas as pd
 from cliente_influx import ClienteInflux
 from cliente_pgsql import ClientePostgres
 import random
+import config_global
 
 depurar = True if "DEPURAR" in os.environ and os.environ["DEPURAR"].lower() == "true" else False
 
@@ -89,6 +90,8 @@ PVET_ids = {}
 def cargar_PVET_ids(cliente_sql: ClientePostgres, planta:str, usar_cache=False) -> dict[int,PVET_id]:
     ''' Carga los identificadores de los dispositivos PVET desde la base de datos SQL.
     Si usar_cache es True, intenta cargar los datos desde un fichero JSONL.'''
+    if len(PVET_ids) > 0:
+        PVET_ids.clear()  # Limpia el diccionario si ya hay datos cargados
     nom_fich_pvet_ids = f'pvet_ids-{planta}.jsonl'
     if usar_cache and os.path.exists(nom_fich_pvet_ids):
         with open(nom_fich_pvet_ids, 'r') as f:
@@ -134,19 +137,29 @@ def escoger_otro_dispositivo(PVET_ids, disp_fallo: PVET_id):
 
 ###################################################################
 
-def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflux, nom_planta:str, tipo_disp:str, tabla_disp:str, margen_temporal_h:int=0) -> pd.DataFrame:
+num_id_fallo = num_id_caso = 1
+
+def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflux, nom_planta:str, tipo_disp:str, diag_interés=None, margen_temporal_h:int=0) -> pd.DataFrame:
     ''' Devuelve un DataFrame con los datos de cada fallo y de varios dispositivos sanos.
     '''
+    global num_id_fallo, num_id_caso
+    CONFIG = config_global.ConfigGlobal()
     nom_tabla_fallos = 'DDA_DIA'
     tabla_disp = f'vop_{tipo_disp}'.lower()
-    consulta = f"SELECT COUNT(*) FROM {nom_tabla_fallos} WHERE Type = '{tipo_disp}' AND ope_ck = 1"
+    filtro_interés = f"Type = '{tipo_disp}' AND ope_ck = 1"
+    if diag_interés is not None:
+        if isinstance(diag_interés, int):
+            filtro_interés += f" AND diag = {diag_interés}"
+        elif isinstance(diag_interés, list):
+            filtro_interés += f" AND diag IN ({','.join(map(str, diag_interés))})"
+    consulta = f"SELECT COUNT(*) FROM {nom_tabla_fallos} WHERE {filtro_interés}"
     #cliente_sql.obtener_cursor(consulta, as_dict=False)
     cliente_sql.obtener_cursor(consulta)
     num_fallos = int(cliente_sql.leer_registro()['count'])
     # Obtiene todos los fallos validados de ese tipo
     consulta_sql = f""" SELECT * FROM {nom_tabla_fallos}
                         JOIN diagnosis ON {nom_tabla_fallos}.diag=diagnosis.code
-                        WHERE Type = '{tipo_disp}' AND ope_ck = 1
+                        WHERE {filtro_interés}
                         ORDER BY diag,Duration DESC"""
     if depurar:
         print(f'CONSULTA SQL: {consulta_sql}')
@@ -157,7 +170,7 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
     # Por tanto, todos los dispositivos de un mismo fallo tendrán el mismo id de grupo de fallo,
     # y cada dispositivo tendrá un id de caso único.
     df_casos = None
-    num_id_fallo = num_id_caso = num_fallo = 1
+    num_fallo = 1
     for fila in cursor:
         print(f'{num_fallo}/{num_fallos} FALLOS', flush=True)
         ini_time = fila['ini_time']
@@ -182,7 +195,7 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
         dispositivos_guardar = [ disp_fallo ]
         # Escoge varios dispositivos sanos al azar. Intenta que sean una cierta cantidad mínima, pero a veces hay menos.
         dispositivos_sanos = obtener_dispositivos_sanos(cliente_sql, tipo_disp, fecha_fallo=ini_día.strftime('%Y-%m-%d'))
-        num_disp_sanos = min(500, len(dispositivos_sanos))
+        num_disp_sanos = min(CONFIG.max_disp_sanos_por_fallo, len(dispositivos_sanos))
         ids_dispositivos_sanos = random.sample(list(dispositivos_sanos.keys()), num_disp_sanos)
         for i in ids_dispositivos_sanos:
             dispositivos_guardar.append(dispositivos_sanos[i])
@@ -242,9 +255,6 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
             num_id_caso += 1
             num_id_fallo += 1 # Solo incrementa si se han guardado datos de algún dispositivo
         num_fallo += 1
-        # Poner un valor más bajo para procesar solo unos pocos fallos
-        if num_fallo > 9999999:
-            break
     return df_casos.sort_index() if df_casos is not None else None
 
 ###################################################################
