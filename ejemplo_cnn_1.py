@@ -121,4 +121,4 @@ if __name__ == "__main__":
         # a la línea de órdenes.
         # Ejemplo: python ejemplo_cnn_1.py
         # Aquí se puede cambiar el nombre del fichero por defecto si se desea.
-        main1(["--fich_datos", "prueba/rd02/fallos-IN.csv"])
+        main1(["--fich_datos", "datos/fallosSB_rd02_sp09_Temp/fallosSB_rd02_sp09_Temp.csv"])

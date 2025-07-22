@@ -5,27 +5,42 @@ import config_global
 CONFIG = config_global.ConfigGlobal()
 
 # Plantas que se consideran.
-plantas = CONFIG.plantas_all
-#plantas = [ 'sp08', 'sp09', 'sp10' ]
+#plantas = CONFIG.plantas_all
+plantas = [ 'rd02', 'sp09' ]
 
 # Tipos de dispositivos que se consideran.
 #tipos_disp = CONFIG.tipos_disp_all
-tipos_disp = [ 'ST', 'IN', 'TR', 'SB', 'CT' ]
+tipos_disp = ['SB'] #[ 'ST', 'IN', 'TR', 'SB', 'CT' ]
 
 # Códigos de diagnóstico que se consideran.
 # Si no se define, se considerarán todos.
 # Ej:
 #diags = [ 241, 242 ]
 
+
 # Ej, diferentes según el tipo disp:
 # Para los que no vienen, se considerarán todos.
-#diags = {
-#            'ST' : [ 1, 2, 3 ],
-#            'SB' : [ 4, 5, 6 ],
-#         }
+diags = {           
+    'ST': ['201', '202'],
+    'IN': ['241', '242', '243', '244', '245', '246', '341', '342', '343', '344', '345'],
+    'TR': ['260', '261', '262', '263', '264'],
+    'SB': ['221', '222', '224', '320'],
+    'CT': ['280', '281', '282']  #En la hoja de diagnósticos de QPV sale como 'GL'
+}
+
+
+# (22/07/2025) Variables de entrada por tipo de dispositivo (comentar si se quieren usar todas)
+variables_por_tipo = {
+    'ST': ['vdc', 'idc', 'pdc', 'temp'],
+    'IN': ['vdc', 'idc', 'pdc', 'temp', 'temp_cab'],
+    'TR': ['pos', 'angulo', 'volt_motor'],
+    'SB': ['temp'],
+    'CT': ['vdc', 'idc']  # Ejemplo para CT
+}
+
 
 # Fichero donde se guardarán los ficheros generados.
-fich_salida = 'datos/prueba1.csv'
+fich_salida = 'datos/fallosSB_rd02_sp09_Temp/fallosSB_rd02_sp09_Temp.csv'
 
 # Guardar en ficheros separados. Si se omite {tipo_disp}, será uno por planta.
 #fich_salida = 'datos/fallos-{planta}-{tipo_disp}.csv'

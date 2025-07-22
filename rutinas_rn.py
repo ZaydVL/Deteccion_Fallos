@@ -13,6 +13,11 @@ from sklearn.metrics import classification_report, confusion_matrix
 depurar = True if "DEPURAR" in os.environ and os.environ["DEPURAR"].lower() == "true" else False
 
 ###################################################################
+#(22/07/2025) Añadido para poder seleccionar las variables de entrada
+from config_global import ConfigGlobal
+CONFIG = ConfigGlobal()  
+
+###################################################################
 
 def separar_df_train_test(df_fallos, frac_train=0.8):
     """Separa los datos de fallos en conjuntos de entrenamiento y prueba.
@@ -47,21 +52,62 @@ def separar_df_train_test(df_fallos, frac_train=0.8):
 
 ###################################################################
 #ORIGINAL (tomas todas las variables de entrada)
+# def extraer_xy_df(df):
+#     """Extrae las variables X e y del DataFrame de fallos.
+#     Si hay N casos, cada uno con V variables y T pasos, X tendrá forma (N, T, V)
+#     e y tendrá forma (N,)."""
+    
+#     # Elimina diversas columnas que no son variables de operación
+#     var_entrada = set(df.columns)
+#     var_entrada.difference_update([ 'ope_ck', 'ct', 'in', 'tr', 'st', 'sb', 'pvet_id', 'pvet_disp', 'id_caso', 'id_fallo', 'diag', 'diag_txt', 'ini_fallo', 'fin_fallo', 'duration', 'fallo_continuo', 'tipo_disp', 'planta', 'fallo' ])
+#     # Elimina otras columnas que no son numéricas
+#     var_entrada = [col for col in var_entrada if pd.api.types.is_numeric_dtype(df[col])]
+#     var_entrada = sorted(list(var_entrada))
+#     var_salida = 'fallo'
+#     print(f'Variables de entrada: {var_entrada}') # Tienen que ser numéricas
+#     print(f'Variable de salida: {var_salida}') # Variable categórica. En este caso 0 o 1 (no fallo o fallo)
+#     # var_entrada = [ 'pdc']
+#     X = None
+#     y = None
+#     id_casos = []
+#     for id_caso in df['id_caso'].unique():
+#         df_caso = df[df['id_caso'] == id_caso]
+#         if X is None:
+#             X = np.array([df_caso[var_entrada].values])
+#             y = np.array([df_caso[var_salida].values[0]], dtype=int)
+#         else:
+#             X = np.concatenate((X, np.array([df_caso[var_entrada].values])), axis=0)
+#             y = np.concatenate((y, np.array([df_caso[var_salida].values[0]], dtype=int)), axis=0)
+#         id_casos.append(id_caso)
+#     return X, y, id_casos
+
+###################################################################
+#(22/07/2025) Usamos esta para poder seleccionar variables de entrada según el dispositivo seleccionado
 def extraer_xy_df(df):
     """Extrae las variables X e y del DataFrame de fallos.
     Si hay N casos, cada uno con V variables y T pasos, X tendrá forma (N, T, V)
     e y tendrá forma (N,)."""
     
-    # Elimina diversas columnas que no son variables de operación
-    var_entrada = set(df.columns)
-    var_entrada.difference_update([ 'ope_ck', 'ct', 'in', 'tr', 'st', 'sb', 'pvet_id', 'pvet_disp', 'id_caso', 'id_fallo', 'diag', 'diag_txt', 'ini_fallo', 'fin_fallo', 'duration', 'fallo_continuo', 'tipo_disp', 'planta', 'fallo' ])
-    # Elimina otras columnas que no son numéricas
-    var_entrada = [col for col in var_entrada if pd.api.types.is_numeric_dtype(df[col])]
+    # Obtener el tipo de dispositivo del DataFrame
+    tipo_disp = df['tipo_disp'].iloc[0]
+    
+    # Obtener variables específicas para este tipo de dispositivo
+    try:
+        var_entrada = CONFIG.variables_por_tipo[tipo_disp]
+    except (AttributeError, KeyError):
+        # Si no hay configuración específica, usar todas las variables numéricas
+        var_entrada = set(df.columns)
+        var_entrada.difference_update(['ope_ck', 'ct', 'in', 'tr', 'st', 'sb', 'pvet_id', 
+                                     'pvet_disp', 'id_caso', 'id_fallo', 'diag', 'diag_txt', 
+                                     'ini_fallo', 'fin_fallo', 'duration', 'fallo_continuo', 
+                                     'tipo_disp', 'planta', 'fallo'])
+        var_entrada = [col for col in var_entrada if pd.api.types.is_numeric_dtype(df[col])]
+    
     var_entrada = sorted(list(var_entrada))
     var_salida = 'fallo'
-    print(f'Variables de entrada: {var_entrada}') # Tienen que ser numéricas
-    print(f'Variable de salida: {var_salida}') # Variable categórica. En este caso 0 o 1 (no fallo o fallo)
-    # var_entrada = [ 'pdc']
+    print(f'Variables de entrada para {tipo_disp}: {var_entrada}')
+    print(f'Variable de salida: {var_salida}')
+
     X = None
     y = None
     id_casos = []
@@ -75,43 +121,6 @@ def extraer_xy_df(df):
             y = np.concatenate((y, np.array([df_caso[var_salida].values[0]], dtype=int)), axis=0)
         id_casos.append(id_caso)
     return X, y, id_casos
-
-###################################################################
-#(27/07/2025) Usamos esta para poder seleccionar variables de entrada según el dispositivo seleccionado
-# def extraer_xy_df(df):
-#     """Versión modificada para seleccionar variables clave"""
-#     # 1. Definir variables relevantes por tipo de fallo (basado en tu proyecto)
-#     variables_por_fallo = {
-#         'SB': ['vdc', 'idc', 'pdc', 'temp'],  # Fallos en strings
-#         'IN': ['vdc', 'idc', 'pdc', 'temp','temp_cab'],   # Fallos en inversores
-#         'TR': ['pos', 'angulo', 'volt_motor'],# Trackers
-#         'ST': ['irradiancia', 'temp_ambiente'] # Sensores
-#     }
-#     # 2. Obtener el tipo de fallo del DataFrame (asumiendo que existe la columna)
-#     tipo_fallo = df['tipo_fallo'].iloc[0] if 'tipo_fallo' in df.columns else 'SB'  # Valor por defecto
-#     # 3. Seleccionar variables específicas + metadatos esenciales
-#     vars_entrada = variables_por_fallo.get(tipo_fallo, [])
-#     vars_metadatos = ['id_caso', 'fallo']  # Columnas no-numéricas necesarias
-#     # 4. Filtrar columnas (numéricas seleccionadas + metadatos)
-#     columnas_seleccionadas = [
-#         col for col in df.columns 
-#         if (col in vars_entrada or 
-#             col in vars_metadatos or 
-#             pd.api.types.is_numeric_dtype(df[col]))
-#     ]
-#     # 5. Operación original con filtrado
-#     var_salida = 'fallo'
-#     X = None
-#     y = None
-#     for id_caso in df['id_caso'].unique():
-#         df_caso = df[df['id_caso'] == id_caso]
-#         if X is None:
-#             X = np.array([df_caso[columnas_seleccionadas].select_dtypes(include='number').values])
-#             y = np.array([df_caso[var_salida].values[0]], dtype=int)
-#         else:
-#             X = np.concatenate((X, np.array([df_caso[columnas_seleccionadas].select_dtypes(include='number').values])), axis=0)
-#             y = np.concatenate((y, np.array([df_caso[var_salida].values[0]], dtype=int)), axis=0)
-#     return X, y, df['id_caso'].unique()
 
 ###################################################################
 
