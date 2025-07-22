@@ -13,6 +13,8 @@ from preprocesado import cargar_PVET_ids, obtener_datos_casos
 
 depurar = True if "DEPURAR" in os.environ and os.environ["DEPURAR"].lower() == "true" else False
 
+###################################################################
+#ORIGINAL (no permite agregar datos de varias plantas)
 class Config:
 
     def __init__(self, planta=None, tipo_disp=None, dir_ficheros=None, margen_temporal_h=0):
@@ -23,7 +25,19 @@ class Config:
         self.margen_temporal_h = margen_temporal_h
 
 ###################################################################
+#DEEPSEEK (permite agregar datos de varias plantas)  
+# class Config:
 
+#     def __init__(self, planta=None, tipo_disp=None, dir_ficheros=None, margen_temporal_h=0):
+#         ''' Clase para almacenar la configuración del script.'''
+#         self.planta = planta
+#         self.tipo_disp = tipo_disp
+#         self.dir_ficheros = dir_ficheros
+#         self.margen_temporal_h = margen_temporal_h
+        
+
+###################################################################
+#ORIGINAL (no permite agregar datos de varias plantas)       
 def procesar_argumentos(args) -> Config:
     ''' Procesa los argumentos de la línea de órdenes y devuelve un objeto Config.'''
     parser = argparse.ArgumentParser(description='Genera conjuntos de datos de fallos para una planta específica.')
@@ -68,6 +82,6 @@ def main1(args):
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        main1(["--planta", "sp08", "--tipo_disp", "TR", "--dir_ficheros", "prueba/sp08", "--margen_temporal", "0"])
+        main1(["--planta", "sp08", "--tipo_disp", "IN", "--dir_ficheros", "prueba/sp08_IN_all_variables", "--margen_temporal", "0"])
     else:
         main1(sys.argv[1:])
