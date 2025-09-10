@@ -100,4 +100,9 @@ class ConfigGlobal:
                     setattr(clase._instancia, k, v)
         return clase._instancia
 
+    def __str__(self):
+        attrs = {k: v for k, v in self.__dict__.items() 
+             if not k.startswith('_') and not callable(v) and not isinstance(v, type(importlib)) and k != 'CONFIG'}
+        return f"ConfigGlobal({attrs})"
+
 ###################################################################
