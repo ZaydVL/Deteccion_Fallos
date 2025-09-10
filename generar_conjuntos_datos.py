@@ -13,8 +13,6 @@ from cliente_pgsql import ClientePostgres
 from preprocesado import cargar_PVET_ids, obtener_datos_casos
 
 ###################################################################
-#DEEPSEEK (permite agregar datos de varias plantas)  
-# class Config:
 
 def main1(args):
     ''' Genera un conjunto de casos de fallo para las plantas indicadas en la configuración.
