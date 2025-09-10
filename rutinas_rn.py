@@ -7,15 +7,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 
+import config_global
+CONFIG = config_global.ConfigGlobal()
+
 from dibujo_fallos import dibujar_fallo
 from sklearn.metrics import classification_report, confusion_matrix
-
-depurar = True if "DEPURAR" in os.environ and os.environ["DEPURAR"].lower() == "true" else False
-
-###################################################################
-#(22/07/2025) Añadido para poder seleccionar las variables de entrada
-from config_global import ConfigGlobal
-CONFIG = ConfigGlobal()  
 
 ###################################################################
 
@@ -51,62 +47,33 @@ def separar_df_train_test(df_fallos, frac_train=0.8):
     return df_train, df_test
 
 ###################################################################
-#ORIGINAL (tomas todas las variables de entrada)
-# def extraer_xy_df(df):
-#     """Extrae las variables X e y del DataFrame de fallos.
-#     Si hay N casos, cada uno con V variables y T pasos, X tendrá forma (N, T, V)
-#     e y tendrá forma (N,)."""
-    
-#     # Elimina diversas columnas que no son variables de operación
-#     var_entrada = set(df.columns)
-#     var_entrada.difference_update([ 'ope_ck', 'ct', 'in', 'tr', 'st', 'sb', 'pvet_id', 'pvet_disp', 'id_caso', 'id_fallo', 'diag', 'diag_txt', 'ini_fallo', 'fin_fallo', 'duration', 'fallo_continuo', 'tipo_disp', 'planta', 'fallo' ])
-#     # Elimina otras columnas que no son numéricas
-#     var_entrada = [col for col in var_entrada if pd.api.types.is_numeric_dtype(df[col])]
-#     var_entrada = sorted(list(var_entrada))
-#     var_salida = 'fallo'
-#     print(f'Variables de entrada: {var_entrada}') # Tienen que ser numéricas
-#     print(f'Variable de salida: {var_salida}') # Variable categórica. En este caso 0 o 1 (no fallo o fallo)
-#     # var_entrada = [ 'pdc']
-#     X = None
-#     y = None
-#     id_casos = []
-#     for id_caso in df['id_caso'].unique():
-#         df_caso = df[df['id_caso'] == id_caso]
-#         if X is None:
-#             X = np.array([df_caso[var_entrada].values])
-#             y = np.array([df_caso[var_salida].values[0]], dtype=int)
-#         else:
-#             X = np.concatenate((X, np.array([df_caso[var_entrada].values])), axis=0)
-#             y = np.concatenate((y, np.array([df_caso[var_salida].values[0]], dtype=int)), axis=0)
-#         id_casos.append(id_caso)
-#     return X, y, id_casos
 
-###################################################################
-#(22/07/2025) Usamos esta para poder seleccionar variables de entrada según el dispositivo seleccionado
 def extraer_xy_df(df):
     """Extrae las variables X e y del DataFrame de fallos.
     Si hay N casos, cada uno con V variables y T pasos, X tendrá forma (N, T, V)
     e y tendrá forma (N,)."""
-    
+
     # Obtener el tipo de dispositivo del DataFrame
     tipo_disp = df['tipo_disp'].iloc[0]
-    
-    # Obtener variables específicas para este tipo de dispositivo
-    try:
+
+    # Si se han definido variables de entrada específicas para este tipo de dispositivo, usarlas
+    if hasattr(CONFIG, 'variables_por_tipo') and tipo_disp in CONFIG.variables_por_tipo:
         var_entrada = CONFIG.variables_por_tipo[tipo_disp]
-    except (AttributeError, KeyError):
-        # Si no hay configuración específica, usar todas las variables numéricas
+    # Si no, coge todas las variables numéricas excepto las que no son de operación
+    else:
+        # Elimina diversas columnas que no son variables de operación
         var_entrada = set(df.columns)
-        var_entrada.difference_update(['ope_ck', 'ct', 'in', 'tr', 'st', 'sb', 'pvet_id', 
-                                     'pvet_disp', 'id_caso', 'id_fallo', 'diag', 'diag_txt', 
-                                     'ini_fallo', 'fin_fallo', 'duration', 'fallo_continuo', 
+        var_entrada.difference_update(['ope_ck', 'ct', 'in', 'tr', 'st', 'sb', 'pvet_id',
+                                     'pvet_disp', 'id_caso', 'id_fallo', 'diag', 'diag_txt',
+                                     'ini_fallo', 'fin_fallo', 'duration', 'fallo_continuo',
                                      'tipo_disp', 'planta', 'fallo'])
+        # Elimina otras columnas que no son numéricas
         var_entrada = [col for col in var_entrada if pd.api.types.is_numeric_dtype(df[col])]
-    
+
     var_entrada = sorted(list(var_entrada))
     var_salida = 'fallo'
-    print(f'Variables de entrada para {tipo_disp}: {var_entrada}')
-    print(f'Variable de salida: {var_salida}')
+    print(f'Variables de entrada: {var_entrada}') # Tienen que ser numéricas
+    print(f'Variable de salida: {var_salida}') # Variable categórica. En este caso 0 o 1 (no fallo o fallo)
 
     X = None
     y = None
@@ -153,8 +120,12 @@ def dibujar_historial(historia, patrón_ficheros=None):
 
 ###################################################################
 
-def cargar_datos(config):
-    nom_fich_datos = config.fich_datos
+def cargar_datos(CONFIG, planta=None):
+    nom_fich_datos = CONFIG.fich_datos
+    if '{planta}' in nom_fich_datos and planta is not None:
+        nom_fich_datos = nom_fich_datos.replace('{planta}', planta)
+    if not os.path.exists(nom_fich_datos):
+        return None
     df_fallos = pd.read_csv(nom_fich_datos, index_col=0, parse_dates=['_time', 'ini_fallo', 'fin_fallo'], on_bad_lines='error')
     # Elimina columnas que son completamente NaN
     # Pone el resto de NaN a 0
@@ -259,7 +230,7 @@ def evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros):
                 comentario = 'Confianza reducida'
             else:
                 comentario = ''
-            print(f'Prueba {i+1} {planta}/{tipo_disp}: ID={id_fallo}, Diag={diag_txt}, Predicción: {clase_pred}, Real: {clase_real}, Probabilidades: {predicciones[i]}, Confianza: {confianza:.2f} <{comentario}>')
+            print(f'Prueba {i+1} {planta}/{tipo_disp}: ID_FALLO={id_fallo}, Diag={diag}/{diag_txt if clase_real else "SANO"}, Pred: {clase_pred}, Real: {clase_real}, Probs: {predicciones[i]}, Conf: {confianza:.2f} <{comentario}>')
             info_prueba = { 'id_prueba' : i+1,
                             'id_fallo' : id_fallo,
                             'planta' : planta,
