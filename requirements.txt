@@ -3,6 +3,7 @@ ipykernel
 
 
 keras
+keras_tuner
 tensorflow
 # Para dibujar modelos
 pydot

@@ -233,7 +233,7 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
                 df_casos = pd.concat([df_casos, datos_guardar])
             num_id_caso += 1
             num_dispositivos_guardados += 1
-        if num_dispositivos_guardados > 0:
+        if num_dispositivos_guardados > 0 and False: # JMR: pendiente revisar, quizá no vale para mucho.
             # Si se han guardado datos de algún dispositivo,
             # guarda el promedio para cada instante del día como un caso más
             datos_promedio = df_día.groupby('_time').mean()

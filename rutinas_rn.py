@@ -57,8 +57,8 @@ def extraer_xy_df(df):
     tipo_disp = df['tipo_disp'].iloc[0]
 
     # Si se han definido variables de entrada específicas para este tipo de dispositivo, usarlas
-    if hasattr(CONFIG, 'variables_por_tipo') and tipo_disp in CONFIG.variables_por_tipo:
-        var_entrada = CONFIG.variables_por_tipo[tipo_disp]
+    if hasattr(CONFIG, 'var_entrada') and tipo_disp in CONFIG.var_entrada:
+        var_entrada = CONFIG.var_entrada[tipo_disp]
     # Si no, coge todas las variables numéricas excepto las que no son de operación
     else:
         # Elimina diversas columnas que no son variables de operación
@@ -70,11 +70,11 @@ def extraer_xy_df(df):
         # Elimina otras columnas que no son numéricas
         var_entrada = [col for col in var_entrada if pd.api.types.is_numeric_dtype(df[col])]
 
+    # var_entrada = [ 'pdc']
     var_entrada = sorted(list(var_entrada))
     var_salida = 'fallo'
     print(f'Variables de entrada: {var_entrada}') # Tienen que ser numéricas
     print(f'Variable de salida: {var_salida}') # Variable categórica. En este caso 0 o 1 (no fallo o fallo)
-
     X = None
     y = None
     id_casos = []
@@ -135,7 +135,7 @@ def cargar_datos(CONFIG, planta=None):
     df_fallos = df_fallos.loc[:, (df_fallos != 0).any(axis=0)]
     # Se queda solo con una cierta cantidad máxima de casos sanos para cada fallo,
     # más todos los que sean sintéticos (promedio..., tienen pvet_id = 0)
-    max_num_casos_sanos = 5
+    max_num_casos_sanos = CONFIG.max_disp_sanos_por_fallo if hasattr(CONFIG, 'max_disp_sanos_por_fallo') else 5
     for id_fallo in df_fallos['id_fallo'].unique():
         id_casos_sanos = df_fallos.query(f'(id_fallo == {id_fallo}) & (~ fallo) & pvet_id > 0')['id_caso'].unique()
         if len(id_casos_sanos) > max_num_casos_sanos:
@@ -196,6 +196,20 @@ def evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros):
         diag = datos_aprendizaje['diag']
         diag_txt = datos_aprendizaje['diag_txt']
         df_fallos = datos_aprendizaje['df_fallos']
+
+        if False: # DDD
+            print(f'EVALM: X_test shape: {X_test.shape}, y_test shape: {y_test.shape}')
+            # Dibujar X_test para inspección visual
+            for i in range(X_test.shape[0] - 1):
+                plt.figure(figsize=(8, 3))
+                plt.plot(X_test[i].squeeze(), color='blue')
+                plt.plot(X_test[i+1].squeeze(), color='orange')
+                plt.title(f'X_test[{i}] - id_caso: {id_casos_test[i]}-{id_casos_test[i+1]}, y_test: {y_test[i]}-{y_test[i+1]}')
+                plt.xlabel('Timestep')
+                plt.ylabel('Valor normalizado')
+                plt.tight_layout()
+                plt.savefig(f"{patrón_ficheros}-X_test-{i}.png")
+                plt.close()
 
         loss, accuracy = modelo.evaluate(X_test, y_test)
         print(f'Loss: {loss}, Accuracy: {accuracy}')
