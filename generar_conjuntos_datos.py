@@ -14,7 +14,23 @@ from preprocesado import cargar_PVET_ids, obtener_datos_casos
 
 ###################################################################
 
+def uso():
+    print(f'Uso: {sys.argv[0]} fich_config')
+    print()
+    print(f'  fich_config : Fichero de configuración')
+    print()
+    print(f'Ej: {sys.argv[0]}  config/config_rn1.py')
+    print()
+    print(f'Genera conjuntos de datos para entrenamiento y evaluación de modelos de diagnóstico de fallos en plantas fotovoltaicas.')
+    print(f'El programa se conecta a las bases de datos de PVET, obtiene casos de fallo para las plantas y tipos de dispositivos indicados en la configuración, y guarda los datos en un formato adecuado para su uso posterior en entrenamiento y evaluación de modelos de diagnóstico de fallos.')
+    print(f'Los casos de fallo se generan para las plantas y tipos de dispositivos indicados en la configuración, y se pueden filtrar por diagnósticos de interés. En cada caso de fallo se incluye el dispositivo que ha fallado y varios dispositivos sanos, junto con sus datos temporales alrededor del momento del fallo.')
+
+###################################################################
+
 def main1(args):
+    if len(args) != 1:
+        uso()
+        sys.exit(1)
     ''' Genera un conjunto de casos de fallo para las plantas indicadas en la configuración.
     En cada caso aparece el dispositivo que ha fallado y varios más sanos.
     Los datos se guardan en un directorio configurable.'''
@@ -30,7 +46,7 @@ def main1(args):
         with ClienteInflux('params-influx.json') as cliente_influx:
             for planta in CONFIG.plantas:
                 df_fallos_planta = None
-                nom_bd_pgsql = f'pvet-{planta}'
+                nom_bd_pgsql = f'pvet_{planta}'
                 nom_bu_influx = f'pvet-{planta}'
                 cliente_postgres.conectar(nom_bd_pgsql)
                 cargar_PVET_ids(cliente_postgres, planta, usar_cache=False)
