@@ -9,3 +9,4 @@ pvet_ids*.jsonl
 prueba*/
 .vscode/
 .ipynb_checkpoints/
+venv

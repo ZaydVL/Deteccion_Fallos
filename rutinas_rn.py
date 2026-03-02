@@ -153,9 +153,9 @@ def generar_datos_aprendizaje(df_fallos_base, planta, diag):
     num_casos = df_fallos['id_caso'].nunique()
     num_fallos = df_fallos['id_fallo'].nunique()
     print(f'Número de casos con diagnóstico {diag}/{diag_txt}: {num_casos} total ({num_casos-num_fallos} sanos, {num_fallos} fallos)')
-    if num_casos < 2 or num_fallos < 2:
-        print(f'No hay suficientes casos o fallos para entrenar un modelo. Número de casos: {num_casos}, número de fallos: {num_fallos}')
-        return None
+    #if num_casos < 2 or num_fallos < 2:
+    #    print(f'No hay suficientes casos o fallos para entrenar un modelo. Número de casos: {num_casos}, número de fallos: {num_fallos}')
+    #    return None
 
     df_train, df_test = separar_df_train_test(df_fallos, frac_train=0.8)
     X_train, y_train, id_casos_train = extraer_xy_df(df_train)
