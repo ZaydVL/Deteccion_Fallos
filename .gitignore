@@ -10,3 +10,4 @@ prueba*/
 .vscode/
 .ipynb_checkpoints/
 venv
+tuner*
