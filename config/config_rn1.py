@@ -14,7 +14,7 @@ semilla = 42
 
 # Ficheros con los datos de entrenamiento y validación.
 # Pueden usarse {planta} y {tipo_disp} si están en ficheros separados.
-fich_datos = 'datos/fallos-{planta}.csv'
+fich_datos = 'datos/prueba1.csv'
 
 # Directorios donde se guardarán los ficheros generados.
 # Pueden usarse {planta} y {tipo_disp} como patrón.

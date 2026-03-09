@@ -112,7 +112,7 @@ def entrenar_modelo(modelo, X_train, y_train, X_test, y_test, epochs=200, batch_
 ###################################################################
 
 def main1(args):
-    config_global.ConfigGlobal('config/config_gen1-jmr.py')
+    config_global.ConfigGlobal('config/config_gen1.py')
     CONFIG = config_global.ConfigGlobal(args[0])
     print(f'CONFIG usada:\n{CONFIG}')
     nom_fich_datos = CONFIG.fich_datos

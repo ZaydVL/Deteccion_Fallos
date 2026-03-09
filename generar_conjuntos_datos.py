@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+#%%
 import sys
 import os
 import config_global
@@ -92,7 +92,7 @@ def main1(args):
         print(df_fallos_total.groupby('id_fallo')['pvet_disp'].value_counts())
 
 ###################################################################
-
+#%%
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         main1(["config/config_gen1.py"])

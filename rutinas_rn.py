@@ -54,7 +54,7 @@ def extraer_xy_df(df):
     e y tendrá forma (N,)."""
 
     # Obtener el tipo de dispositivo del DataFrame
-    tipo_disp = df['tipo_disp'].iloc[0]
+    tipo_disp = df['tipo_disp'].iloc[0]   ### %%%% AQUI ESTÁN ENTRANDO MÁS TIPOS DE DISP (ARREGLAR)
 
     # Si se han definido variables de entrada específicas para este tipo de dispositivo, usarlas
     if hasattr(CONFIG, 'var_entrada') and tipo_disp in CONFIG.var_entrada:
@@ -146,6 +146,9 @@ def cargar_datos(CONFIG, planta=None):
 ###################################################################
 
 def generar_datos_aprendizaje(df_fallos_base, planta, diag):
+    ## Observacion: Se está considerando id_fallo como si fueran términos diferentes
+    ## pero entiendo que antes señalaban a una clasificación diferente, ahora solo tenemos
+    ## un 0 o 1 dependiento de si se trata un fallo o un dato bueno (preguntar)
     id_fallos = df_fallos_base[df_fallos_base['diag'] == diag]['id_fallo'].unique()
     df_fallos = df_fallos_base[df_fallos_base['id_fallo'].isin(id_fallos)]
     diag_txt = df_fallos[df_fallos['fallo']]['diag_txt'].unique()[0]
