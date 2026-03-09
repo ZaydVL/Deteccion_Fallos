@@ -149,18 +149,26 @@ def generar_datos_aprendizaje(df_fallos_base, planta, diag):
     ## Observacion: Se está considerando id_fallo como si fueran términos diferentes
     ## pero entiendo que antes señalaban a una clasificación diferente, ahora solo tenemos
     ## un 0 o 1 dependiento de si se trata un fallo o un dato bueno (preguntar)
-    id_fallos = df_fallos_base[df_fallos_base['diag'] == diag]['id_fallo'].unique()
-    df_fallos = df_fallos_base[df_fallos_base['id_fallo'].isin(id_fallos)]
-    diag_txt = df_fallos[df_fallos['fallo']]['diag_txt'].unique()[0]
-    tipo_disp = df_fallos[df_fallos['fallo']]['tipo_disp'].unique()[0]
-    num_casos = df_fallos['id_caso'].nunique()
-    num_fallos = df_fallos['id_fallo'].nunique()
+
+    ## UNA FORMA DE SOLVENTARLO SIN NECESIDAD DE MODIFICAR LA BASE DE DATOS Y LA FORMA EN 
+    ## QUE LA IMPORTA ES REALIZAR LA CLASIFICACIÓN POR INSTRUMENTOS (ES DECIR, POR GRUPO)
+    ## DE FALLOS QUE SON LOS QUE ESTÁN EN EN LOS .PY DE CONFIGURACIÓN Y ASÍ SE 
+    ## ASEGURA HACERLO AUNQUE A LARGO PLAZO SE NECESITA TENERLOS CLASIFICACOS POR TIPO DE 
+    ## DIAG YA QUE ESTO IMPLICA
+
+    df_aux = df_fallos_base[df_fallos_base['diag'] == diag]
+    id_fallos = df_aux['id_fallo'].unique()
+    df_fallos = df_aux[df_aux['id_fallo'].isin(id_fallos)]
+    diag_txt = df_aux[df_aux['fallo']]['diag_txt'].unique()[0]
+    tipo_disp = df_aux[df_aux['fallo']]['tipo_disp'].unique()[0]
+    num_casos = df_aux['id_caso'].nunique()
+    num_fallos = df_aux['id_fallo'].nunique()
     print(f'Número de casos con diagnóstico {diag}/{diag_txt}: {num_casos} total ({num_casos-num_fallos} sanos, {num_fallos} fallos)')
     #if num_casos < 2 or num_fallos < 2:
     #    print(f'No hay suficientes casos o fallos para entrenar un modelo. Número de casos: {num_casos}, número de fallos: {num_fallos}')
     #    return None
 
-    df_train, df_test = separar_df_train_test(df_fallos, frac_train=0.8)
+    df_train, df_test = separar_df_train_test(df_aux, frac_train=0.8)
     X_train, y_train, id_casos_train = extraer_xy_df(df_train)
     X_test, y_test, id_casos_test = extraer_xy_df(df_test)
 
@@ -173,7 +181,7 @@ def generar_datos_aprendizaje(df_fallos_base, planta, diag):
     datos_aprendizaje['diag_txt'] = diag_txt
     datos_aprendizaje['planta'] = planta
     datos_aprendizaje['tipo_disp'] = tipo_disp
-    datos_aprendizaje['df_fallos'] = df_fallos
+    datos_aprendizaje['df_fallos'] = df_aux
     datos_aprendizaje['df_train'] = df_train
     datos_aprendizaje['df_test'] = df_test
     datos_aprendizaje['X_train'] = X_train

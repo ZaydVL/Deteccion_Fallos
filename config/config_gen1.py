@@ -17,7 +17,7 @@ tipos_disp = [ 'ST', 'IN', 'TR', 'SB', 'CT' ]
 # Ej:
 #diags = [ 241, 242 ]
 
-# Ej, diferentes según el tipo disp:
+# Ej, diferentes tipos de fallo según el tipo disp:
 # Para los que no vienen, se considerarán todos.
 #diags = {
 #    'ST': [201, 202],
