@@ -4,7 +4,7 @@
 import config_global
 CONFIG = config_global.ConfigGlobal()
 
-plantas = CONFIG.plantas_all
+plantas = ['sp10']
 tipos_disp = [ 'ST' ]
 diags = [ 201, 345, 202 ]
 

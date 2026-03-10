@@ -178,6 +178,31 @@ def main1(args):
             print('\n' * 5)
 
 ###################################################################
+
+def main2(args):
+    config_global.ConfigGlobal('config/config_gen1.py')
+    CONFIG = config_global.ConfigGlobal(args[0])
+    print(f'CONFIG usada:\n{CONFIG}')
+    nom_fich_datos = CONFIG.fich_datos
+    dir_resultados = CONFIG.dir_resultados
+    if not os.path.exists(dir_resultados):
+        os.makedirs(dir_resultados)
+    with open(f'{dir_resultados}/config_usada.txt', 'w') as f:
+        f.write(str(CONFIG) + '\n')
+    for planta in CONFIG.plantas:
+        dir_resultados_planta = dir_resultados.replace('{planta}', planta)
+        if not os.path.exists(dir_resultados_planta):
+            os.makedirs(dir_resultados_planta)
+        df_fallos = cargar_datos(CONFIG, planta=planta)
+        if df_fallos is None:
+            print(f'No existen datos para la planta {planta} en {nom_fich_datos}')
+            continue
+        df_fallos_base = df_fallos.copy()
+        # Procesa por separado cada tipo de fallo (código diag diferente)
+        for diag in df_fallos_base['diag'].unique():
+            if diag == 0: # El código diag=0 significa caso sano. Por tanto, no es un tipo de fallo.
+                continue
+
 #%%
 
 if __name__ == "__main__":
