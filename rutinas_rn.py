@@ -48,7 +48,7 @@ def separar_df_train_test(df_fallos, frac_train=0.8):
 
 ###################################################################
 
-def extraer_xy_df(df):
+def extraer_xy_df(df, multiclass_output=False):
     """Extrae las variables X e y del DataFrame de fallos.
     Si hay N casos, cada uno con V variables y T pasos, X tendrá forma (N, T, V)
     e y tendrá forma (N,)."""
@@ -72,7 +72,11 @@ def extraer_xy_df(df):
 
     # var_entrada = [ 'pdc']
     var_entrada = sorted(list(var_entrada))
-    var_salida = 'fallo'
+    if multiclass_output is False:
+        var_salida = 'fallo'
+    else:
+        var_salida = 'categorical'
+
     print(f'Variables de entrada: {var_entrada}') # Tienen que ser numéricas
     print(f'Variable de salida: {var_salida}') # Variable categórica. En este caso 0 o 1 (no fallo o fallo)
     X = None
@@ -146,29 +150,51 @@ def cargar_datos(CONFIG, planta=None):
 ###################################################################
 
 def generar_datos_aprendizaje(df_fallos_base, planta, diag):
-    ## Observacion: Se está considerando id_fallo como si fueran términos diferentes
-    ## pero entiendo que antes señalaban a una clasificación diferente, ahora solo tenemos
-    ## un 0 o 1 dependiento de si se trata un fallo o un dato bueno (preguntar)
 
-    ## UNA FORMA DE SOLVENTARLO SIN NECESIDAD DE MODIFICAR LA BASE DE DATOS Y LA FORMA EN 
-    ## QUE LA IMPORTA ES REALIZAR LA CLASIFICACIÓN POR INSTRUMENTOS (ES DECIR, POR GRUPO)
-    ## DE FALLOS QUE SON LOS QUE ESTÁN EN EN LOS .PY DE CONFIGURACIÓN Y ASÍ SE 
-    ## ASEGURA HACERLO AUNQUE A LARGO PLAZO SE NECESITA TENERLOS CLASIFICACOS POR TIPO DE 
-    ## DIAG YA QUE ESTO IMPLICA
+    """
 
-    df_aux = df_fallos_base[df_fallos_base['diag'] == diag]
-    id_fallos = df_aux['id_fallo'].unique()
-    df_fallos = df_aux[df_aux['id_fallo'].isin(id_fallos)]
-    diag_txt = df_aux[df_aux['fallo']]['diag_txt'].unique()[0]
-    tipo_disp = df_aux[df_aux['fallo']]['tipo_disp'].unique()[0]
-    num_casos = df_aux['id_caso'].nunique()
-    num_fallos = df_aux['id_fallo'].nunique()
+    Las dos redes implementadas originalmente realizaban solamente una DETECCIÓN DE FALLOS
+    de manera que todos los fallos incluidos en la red (sin importar su índole, su origen)
+    sus caracterísitcas etc pues simplemente eran distinguidos del funcionamiento normal (480
+    datos aprox.) lo que puede servir como un stage preliminar a la CLASIFICACIÓN DE FALLOS.
+
+    Respecto a la CLASIFICACIÓN DE FALLOS PUEDE HABER DOS O MÁS ENFOQUES:
+        1) En primera instancia puede realizarse una arquitectura especializada a cada fallo
+            de forma que se necesitarían N (siendo N el número de fallos disponibles, es decir
+            número de "diag") arquitecturas que entrarían en función en paralelo para que puedan 
+            clasificar qué tipo de fallo está ocurriendo.
+
+        2) Enfoque multicategórico acotado: De acuerdo a lo que logren explorar Celene y Juan
+            se podrá tal vez disponer de tipos de fallos juntos o estudiar pares, ternas etc de fallos
+            que puedan ser facilmente identificables de forma multicategórica por una arquitectura
+            dispuesta. Esto ayudaría a reducir el número de modelos funcionando en paralelo, el entrenamiento
+            y tiempo de ejecución etc.
+
+        3) Enfoque multicategórico global: Literalmente ser capaces de una CLASIFICACIÓN DE FALLOS
+            global (lo cual, a mi juicio, dependerá fuertemente del prepocesamiento que hagamos
+            los estudios que se realicen sobre los conjuntos de datos y, por supuesto, la disponibilidad
+            de datos para cada categoría de fallo además de datos sanos, que son facilmente
+            obtenibles). Aquí es donde se reduce realmente eltiempo de respuesta, entrenamiento y
+            demás cosas, lo cual quiere lograrse en la medida de lo posible.
+
+            
+    Por ahora generalizaré esta función en una nueva en este mismo módulo con el fin de poder considerar la 
+    creación de conjuntos de entranmiento que sean considerados o para clasificación o para detección destinadas
+    a más de un tipo de fallo.
+    """
+
+    id_fallos = df_fallos_base[df_fallos_base['diag'] == diag]['id_fallo'].unique()  ## Tenía sentido antes pero ahora todos los valores son 1, creo que tiene que ver que son comprobados
+    df_fallos = df_fallos_base[df_fallos_base['id_fallo'].isin(id_fallos)]
+    diag_txt = df_fallos[df_fallos['fallo']]['diag_txt'].unique()[0]
+    tipo_disp = df_fallos[df_fallos['fallo']]['tipo_disp'].unique()[0]
+    num_casos = df_fallos['id_caso'].nunique()
+    num_fallos = df_fallos['id_fallo'].nunique()
     print(f'Número de casos con diagnóstico {diag}/{diag_txt}: {num_casos} total ({num_casos-num_fallos} sanos, {num_fallos} fallos)')
     #if num_casos < 2 or num_fallos < 2:
     #    print(f'No hay suficientes casos o fallos para entrenar un modelo. Número de casos: {num_casos}, número de fallos: {num_fallos}')
     #    return None
 
-    df_train, df_test = separar_df_train_test(df_aux, frac_train=0.8)
+    df_train, df_test = separar_df_train_test(df_fallos, frac_train=0.8)
     X_train, y_train, id_casos_train = extraer_xy_df(df_train)
     X_test, y_test, id_casos_test = extraer_xy_df(df_test)
 
@@ -181,7 +207,7 @@ def generar_datos_aprendizaje(df_fallos_base, planta, diag):
     datos_aprendizaje['diag_txt'] = diag_txt
     datos_aprendizaje['planta'] = planta
     datos_aprendizaje['tipo_disp'] = tipo_disp
-    datos_aprendizaje['df_fallos'] = df_aux
+    datos_aprendizaje['df_fallos'] = df_fallos
     datos_aprendizaje['df_train'] = df_train
     datos_aprendizaje['df_test'] = df_test
     datos_aprendizaje['X_train'] = X_train
@@ -192,6 +218,60 @@ def generar_datos_aprendizaje(df_fallos_base, planta, diag):
     datos_aprendizaje['id_casos_test'] = id_casos_test
     datos_aprendizaje['scaler'] = scaler
 #    datos_aprendizaje[''] = 
+    return datos_aprendizaje
+
+###################################################################
+
+def train_test_data(df_fallos_base, multiclass_output = False, planta=None, diag=None):
+
+    if diag is None:
+        diag = df_fallos_base["diag"].unique().tolist()
+    if planta is None:
+        planta = df_fallos_base["planta"].unique().tolist()
+    else:
+        planta = ['pvet-'+i for i in planta]
+
+    df_fallos = df_fallos_base.copy()
+    new_fallo = df_fallos_base["fallo"] & df_fallos_base["diag"].isin(diag) & df_fallos_base["planta"].isin(planta)
+    df_fallos["fallo"] = new_fallo
+    diag_txt = df_fallos[df_fallos['fallo']]['diag_txt'].unique()
+    tipo_disp = df_fallos[df_fallos['fallo']]['tipo_disp'].unique()
+
+    if multiclass_output is True:
+        categorical_label, _diag_id = pd.factorize(df_fallos['diag'])
+        df_fallos["categorical"] = np.where(df_fallos['fallo'] == False, 0, categorical_label + 1)
+
+    num_casos = df_fallos['id_caso'].nunique()
+    num_fallos = df_fallos[df_fallos['fallo']]['id_caso'].nunique()
+    print(f'Número de casos con diagnóstico {diag}/{list(diag_txt)}: {num_casos} total | ({num_casos-num_fallos} sanos + otros fallos| {num_fallos} fallos)')
+    
+    if num_casos < 2 or num_fallos < 2:
+        print(f'No hay suficientes casos o fallos para entrenar un modelo. Número de casos: {num_casos}, número de fallos: {num_fallos}')
+        return None
+    
+    df_train, df_test = separar_df_train_test(df_fallos, frac_train=0.8)
+    X_train, y_train, id_casos_train = extraer_xy_df(df_train, multiclass_output)
+    X_test, y_test, id_casos_test = extraer_xy_df(df_test, multiclass_output)
+
+    scaler = keras.utils.normalize
+    X_train = scaler(X_train, axis=1)
+    X_test = scaler(X_test, axis=1)
+
+    datos_aprendizaje = {}
+    datos_aprendizaje['diag'] = diag
+    datos_aprendizaje['diag_txt'] = diag_txt
+    datos_aprendizaje['planta'] = planta
+    datos_aprendizaje['tipo_disp'] = tipo_disp
+    datos_aprendizaje['df_fallos'] = df_fallos
+    datos_aprendizaje['df_train'] = df_train
+    datos_aprendizaje['df_test'] = df_test
+    datos_aprendizaje['X_train'] = X_train
+    datos_aprendizaje['y_train'] = y_train
+    datos_aprendizaje['id_casos_train'] = id_casos_train
+    datos_aprendizaje['X_test'] = X_test
+    datos_aprendizaje['y_test'] = y_test
+    datos_aprendizaje['id_casos_test'] = id_casos_test
+    datos_aprendizaje['scaler'] = scaler
     return datos_aprendizaje
 
 ###################################################################
