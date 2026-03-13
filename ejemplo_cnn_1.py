@@ -21,7 +21,7 @@ from keras.callbacks import EarlyStopping
 
 import keras_tuner
 
-from rutinas_rn import cargar_datos, generar_datos_aprendizaje, dibujar_historial, evaluar_modelo
+from rutinas_rn import cargar_datos, generar_datos_aprendizaje, dibujar_historial, evaluar_modelo, train_test_data
 
 ###################################################################
 
@@ -179,29 +179,73 @@ def main1(args):
 
 ###################################################################
 
-def main2(args):
+def main2(args, multiclass=False):
     config_global.ConfigGlobal('config/config_gen1.py')
     CONFIG = config_global.ConfigGlobal(args[0])
     print(f'CONFIG usada:\n{CONFIG}')
     nom_fich_datos = CONFIG.fich_datos
     dir_resultados = CONFIG.dir_resultados
+    
     if not os.path.exists(dir_resultados):
         os.makedirs(dir_resultados)
     with open(f'{dir_resultados}/config_usada.txt', 'w') as f:
         f.write(str(CONFIG) + '\n')
-    for planta in CONFIG.plantas:
-        dir_resultados_planta = dir_resultados.replace('{planta}', planta)
-        if not os.path.exists(dir_resultados_planta):
-            os.makedirs(dir_resultados_planta)
-        df_fallos = cargar_datos(CONFIG, planta=planta)
-        if df_fallos is None:
-            print(f'No existen datos para la planta {planta} en {nom_fich_datos}')
-            continue
-        df_fallos_base = df_fallos.copy()
-        # Procesa por separado cada tipo de fallo (código diag diferente)
-        for diag in df_fallos_base['diag'].unique():
-            if diag == 0: # El código diag=0 significa caso sano. Por tanto, no es un tipo de fallo.
-                continue
+
+    file_name = str()
+    for i in CONFIG.plantas:
+        file_name += '_' + i   
+
+    dir_resultados_planta = dir_resultados.replace('{planta}', file_name)
+    if not os.path.exists(dir_resultados_planta):
+        os.makedirs(dir_resultados_planta)
+
+    df_fallos = cargar_datos(CONFIG, planta=None)
+    
+    if df_fallos is None:
+        print(f'No existen datos disponibles en {nom_fich_datos}')
+
+    df_fallos_base = df_fallos.copy()
+
+    keras.utils.set_random_seed(CONFIG.semilla)
+    patrón_ficheros = f'{dir_resultados}/res-cnn-{str(CONFIG.diags):03}'
+
+    datos_aprendizaje = train_test_data(df_fallos_base, multiclass_output=multiclass, planta=CONFIG.plantas, diag=CONFIG.diags)
+
+    if datos_aprendizaje is None:
+        print("No se han consegudio entrenar el modelo por falta de datos de aprendizaje.")
+        return None
+    
+    hipermodelo = HiperModelo(datos_aprendizaje['X_train'].shape, num_clases=datos_aprendizaje['num_clases'])
+    
+    tuner = keras_tuner.BayesianOptimization(
+        hypermodel=hipermodelo,
+        objective='val_loss',
+        max_trials=100,
+        num_initial_points=50000,
+#              executions_per_trial=3,
+        directory=f'tuner-rn1-{datetime.now().strftime("%Y%m%d-%H%M%S")}',
+        project_name=f'tuning-rn1-{str(CONFIG.plantas)}-{str(CONFIG.diags):03}'
+    )
+    tuner.search_space_summary(extended=True)
+    tuner.search(datos_aprendizaje['X_train'], datos_aprendizaje['y_train'],
+        epochs=10, validation_data=(datos_aprendizaje['X_test'], datos_aprendizaje['y_test']))
+    best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
+    print(f'Mejores hiperparámetros: {best_hps.values}')
+            
+    #modelo = crear_modelo1(datos_aprendizaje['X_train'].shape, num_clases=num_clases)
+    modelo = tuner.get_best_models(num_models=1)[0]
+    print(modelo.summary())
+    keras.utils.plot_model(modelo, show_shapes=True, to_file=f'{patrón_ficheros}-modelo.png')
+
+    historia = entrenar_modelo(modelo, datos_aprendizaje['X_train'], datos_aprendizaje['y_train'], datos_aprendizaje['X_test'], datos_aprendizaje['y_test'])
+
+    #ver_mapas(modelo)
+
+    dibujar_historial(historia, patrón_ficheros=patrón_ficheros)
+
+    evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros=patrón_ficheros)
+    print('\n' * 5)
+
 
 #%%
 
@@ -210,3 +254,10 @@ if __name__ == "__main__":
         main1(["config/config_rn1.py"])
     else:
         main1(sys.argv[1:])
+
+
+if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        main2(["config/config_rn1.py"], multiclass=True)
+    else:
+        main2(sys.argv[1:])

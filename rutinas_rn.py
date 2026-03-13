@@ -11,6 +11,7 @@ import config_global
 CONFIG = config_global.ConfigGlobal()
 
 from dibujo_fallos import dibujar_fallo
+from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics import classification_report, confusion_matrix
 
 ###################################################################
@@ -75,7 +76,7 @@ def extraer_xy_df(df, multiclass_output=False):
     if multiclass_output is False:
         var_salida = 'fallo'
     else:
-        var_salida = 'categorical'
+        var_salida = "categorical"
 
     print(f'Variables de entrada: {var_entrada}') # Tienen que ser numéricas
     print(f'Variable de salida: {var_salida}') # Variable categórica. En este caso 0 o 1 (no fallo o fallo)
@@ -224,12 +225,17 @@ def generar_datos_aprendizaje(df_fallos_base, planta, diag):
 
 def train_test_data(df_fallos_base, multiclass_output = False, planta=None, diag=None):
 
+    """
+    Si no se especifican los parámetros "planta" y "diag", la función asume que queremos considerar
+    todas las plantas y diagnósticos de fallos disponibles en el archivo.
+    """
+
     if diag is None:
         diag = df_fallos_base["diag"].unique().tolist()
     if planta is None:
         planta = df_fallos_base["planta"].unique().tolist()
     else:
-        planta = ['pvet-'+i for i in planta]
+        planta = ['pvet-'+ i for i in planta]
 
     df_fallos = df_fallos_base.copy()
     new_fallo = df_fallos_base["fallo"] & df_fallos_base["diag"].isin(diag) & df_fallos_base["planta"].isin(planta)
@@ -238,11 +244,17 @@ def train_test_data(df_fallos_base, multiclass_output = False, planta=None, diag
     tipo_disp = df_fallos[df_fallos['fallo']]['tipo_disp'].unique()
 
     if multiclass_output is True:
-        categorical_label, _diag_id = pd.factorize(df_fallos['diag'])
-        df_fallos["categorical"] = np.where(df_fallos['fallo'] == False, 0, categorical_label + 1)
+        df_fallos['diag'] = np.where(df_fallos['fallo'] == False, 0, df_fallos['diag'])
+        categorical_label = np.unique(df_fallos['diag']) 
+        map = {clase: idx for idx, clase in enumerate(categorical_label)}
+        df_fallos["categorical"] = np.vectorize(map.get)(df_fallos['diag'])
+
+    enc = OneHotEncoder(sparse_output=False)
+    df_fallos["Categorical_Encoded"] = enc.fit_transform(df_fallos["categorical"].to_numpy().reshape(-1, 1)).tolist()
 
     num_casos = df_fallos['id_caso'].nunique()
     num_fallos = df_fallos[df_fallos['fallo']]['id_caso'].nunique()
+    num_clases = df_fallos['categorical'].nunique()
     print(f'Número de casos con diagnóstico {diag}/{list(diag_txt)}: {num_casos} total | ({num_casos-num_fallos} sanos + otros fallos| {num_fallos} fallos)')
     
     if num_casos < 2 or num_fallos < 2:
@@ -272,6 +284,7 @@ def train_test_data(df_fallos_base, multiclass_output = False, planta=None, diag
     datos_aprendizaje['y_test'] = y_test
     datos_aprendizaje['id_casos_test'] = id_casos_test
     datos_aprendizaje['scaler'] = scaler
+    datos_aprendizaje["num_clases"] = num_clases
     return datos_aprendizaje
 
 ###################################################################
@@ -319,7 +332,11 @@ def evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros):
         report_dict = classification_report(y_test, y_pred, digits=3, zero_division=np.nan, output_dict=True)
         report_df = pd.DataFrame(report_dict).transpose()
         for campo in [ 'planta', 'diag', 'diag_txt', 'tipo_disp' ]:
-            report_df[campo] = datos_aprendizaje[campo]
+            label = str()
+            for o in datos_aprendizaje[campo]:
+                label = label + str(o) + ' / ' 
+            report_df[campo] = label[:-2]
+
         report_df.to_csv(f"{patrón_ficheros}-metricas.csv")
 
         df_info_pruebas = None
