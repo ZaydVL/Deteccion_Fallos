@@ -207,7 +207,7 @@ def main2(args, multiclass=False):
     df_fallos_base = df_fallos.copy()
 
     keras.utils.set_random_seed(CONFIG.semilla)
-    patrón_ficheros = f'{dir_resultados}/res-cnn-{str(CONFIG.diags):03}'
+    patrón_ficheros = f'{dir_resultados_planta}/res-cnn-{str(CONFIG.diags):03}'
 
     datos_aprendizaje = train_test_data(df_fallos_base, multiclass_output=multiclass, planta=CONFIG.plantas, diag=CONFIG.diags)
 
@@ -220,7 +220,7 @@ def main2(args, multiclass=False):
     tuner = keras_tuner.BayesianOptimization(
         hypermodel=hipermodelo,
         objective='val_loss',
-        max_trials=100,
+        max_trials=50,
         num_initial_points=50000,
 #              executions_per_trial=3,
         directory=f'tuner-rn1-{datetime.now().strftime("%Y%m%d-%H%M%S")}',

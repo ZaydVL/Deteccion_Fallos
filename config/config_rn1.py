@@ -6,7 +6,10 @@ CONFIG = config_global.ConfigGlobal()
 
 plantas = CONFIG.plantas_all
 tipos_disp = [ 'ST' ]
-diags = [ 201, 345, 202 ]
+
+diags = [ 201, 200, 242, 222 ]
+#diags = [ 345, 241, 245, 246 ]
+#diags = [ 246, 242, 245, 241 ]
 
 
 # Semilla para generadores de números pseudoaleatorios
