@@ -5,8 +5,9 @@ import config_global
 CONFIG = config_global.ConfigGlobal()
 
 # Plantas que se consideran.
-plantas = CONFIG.plantas_all
-#plantas = [ 'sp08', 'sp09', 'sp10' ]
+#plantas = CONFIG.plantas_all; name_planta = None
+name_planta = 'br03'
+plantas = [ name_planta ]
 
 # Tipos de dispositivos que se consideran.
 #tipos_disp = CONFIG.tipos_disp_all
@@ -37,7 +38,10 @@ tipos_disp = [ 'ST', 'IN', 'TR', 'SB', 'CT' ]
 #}
 
 # Fichero donde se guardarán los ficheros generados.
-fich_salida = 'datos/prueba1.csv'
+if name_planta is None:
+    fich_salida = fich_salida = 'datos/prueba1.csv'
+else:
+    fich_salida = 'datos/planta_{}.csv'.format(name_planta)
 
 # Guardar en ficheros separados. Si se omite {tipo_disp}, será uno por planta.
 #fich_salida = 'datos/fallos-{planta}-{tipo_disp}.csv'

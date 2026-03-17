@@ -67,7 +67,7 @@ def extraer_xy_df(df, multiclass_output=False):
         var_entrada.difference_update(['ope_ck', 'ct', 'in', 'tr', 'st', 'sb', 'pvet_id',
                                      'pvet_disp', 'id_caso', 'id_fallo', 'diag', 'diag_txt',
                                      'ini_fallo', 'fin_fallo', 'duration', 'fallo_continuo',
-                                     'tipo_disp', 'planta', 'fallo', 'categorical', 'Categorical_Encoded'])
+                                     'tipo_disp', 'planta', 'fallo'])
         # Elimina otras columnas que no son numéricas
         var_entrada = [col for col in var_entrada if pd.api.types.is_numeric_dtype(df[col])]
 
@@ -248,15 +248,13 @@ def train_test_data(df_fallos_base, multiclass_output = False, planta=None, diag
         categorical_label = np.unique(df_fallos['diag']) 
         map = {clase: idx for idx, clase in enumerate(categorical_label)}
         df_fallos["categorical"] = np.vectorize(map.get)(df_fallos['diag'])
-        enc = OneHotEncoder(sparse_output=False)
-        df_fallos["Categorical_Encoded"] = enc.fit_transform(df_fallos["categorical"].to_numpy().reshape(-1, 1)).tolist()
-        num_clases = df_fallos['categorical'].nunique()
-    else:
-        num_clases = df_fallos['fallo'].nunique()
+
+    enc = OneHotEncoder(sparse_output=False)
+    df_fallos["Categorical_Encoded"] = enc.fit_transform(df_fallos["categorical"].to_numpy().reshape(-1, 1)).tolist()
 
     num_casos = df_fallos['id_caso'].nunique()
     num_fallos = df_fallos[df_fallos['fallo']]['id_caso'].nunique()
-    
+    num_clases = df_fallos['categorical'].nunique()
     print(f'Número de casos con diagnóstico {diag}/{list(diag_txt)}: {num_casos} total | ({num_casos-num_fallos} sanos + otros fallos| {num_fallos} fallos)')
     
     if num_casos < 2 or num_fallos < 2:
@@ -264,8 +262,8 @@ def train_test_data(df_fallos_base, multiclass_output = False, planta=None, diag
         return None
     
     df_train, df_test = separar_df_train_test(df_fallos, frac_train=0.8)
-    X_train, y_train, id_casos_train = extraer_xy_df(df_train, multiclass_output=multiclass_output)
-    X_test, y_test, id_casos_test = extraer_xy_df(df_test, multiclass_output=multiclass_output)
+    X_train, y_train, id_casos_train = extraer_xy_df(df_train, multiclass_output)
+    X_test, y_test, id_casos_test = extraer_xy_df(df_test, multiclass_output)
 
     scaler = keras.utils.normalize
     X_train = scaler(X_train, axis=1)

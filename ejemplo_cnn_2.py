@@ -1,4 +1,5 @@
 # pip install keras tensorflow
+#%%
 import sys
 import os
 import config_global
@@ -223,6 +224,8 @@ def main1(args):
                 print('\n' * 5)
     
 ###################################################################
+
+#%%
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
