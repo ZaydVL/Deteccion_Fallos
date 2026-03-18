@@ -220,11 +220,7 @@ def main2(args, multiclass=False):
     tuner = keras_tuner.BayesianOptimization(
         hypermodel=hipermodelo,
         objective='val_loss',
-<<<<<<< HEAD
         max_trials=10,
-=======
-        max_trials=100,
->>>>>>> parent of 253ee25 (Fixing errors in rutinas.py (multiclass_output = False error) and adding another module to LSTM architecture)
         num_initial_points=50000,
 #              executions_per_trial=3,
         directory=f'tuner-rn1-{datetime.now().strftime("%Y%m%d-%H%M%S")}',
