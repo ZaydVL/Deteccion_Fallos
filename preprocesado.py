@@ -252,8 +252,8 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
             datos_promedio['ope_ck'] = fila['ope_ck']
             datos_promedio['fallo'] = False
             df_casos = pd.concat([df_casos, datos_promedio])
-            num_id_caso += 1
-            num_id_fallo += 1 # Solo incrementa si se han guardado datos de algún dispositivo
+        num_id_caso += 1
+        num_id_fallo += 1 # Solo incrementa si se han guardado datos de algún dispositivo
         num_fallo += 1
     return df_casos.sort_index() if df_casos is not None else None
 

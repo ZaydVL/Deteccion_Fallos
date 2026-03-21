@@ -179,12 +179,17 @@ def generar_datos_aprendizaje(df_fallos_base, planta, diag):
             demás cosas, lo cual quiere lograrse en la medida de lo posible.
 
             
-    Por ahora generalizaré esta función en una nueva en este mismo módulo con el fin de poder considerar la 
-    creación de conjuntos de entranmiento que sean considerados o para clasificación o para detección destinadas
-    a más de un tipo de fallo.
+    Actualización a 21/03/2025:
+
+        Ambas funciones, generar_datos_aprendizaje y train_test_data convenrgen al mismo compoortamiento solo
+        que la función generar_datos_aprendizaje está implementada de forma incompleta considerando que acepta 
+        el parámetro "planta", lo que en realidad dentro de toda la cadena de operación no realiza absolutamente 
+        nada. Siendo así que toma todos los fallos cuyo "diag" se especifique sin importar de qué planta lo tome.
+        De esta forma se implementa un nuevo parámetro que es denominado "exclusive_diag" el cual señala que se 
+        desea obtener SOLO los datos de entrenamiento y validación (fallas y no fallas) del "diag" especificado 
     """
 
-    id_fallos = df_fallos_base[df_fallos_base['diag'] == diag]['id_fallo'].unique()  ## Tenía sentido antes pero ahora todos los valores son 1, creo que tiene que ver que son comprobados
+    id_fallos = df_fallos_base[df_fallos_base['diag'] == diag]['id_fallo'].unique()  
     df_fallos = df_fallos_base[df_fallos_base['id_fallo'].isin(id_fallos)]
     diag_txt = df_fallos[df_fallos['fallo']]['diag_txt'].unique()[0]
     tipo_disp = df_fallos[df_fallos['fallo']]['tipo_disp'].unique()[0]
@@ -223,11 +228,30 @@ def generar_datos_aprendizaje(df_fallos_base, planta, diag):
 
 ###################################################################
 
-def train_test_data(df_fallos_base, multiclass_output = False, planta=None, diag=None):
+def train_test_data(df_fallos_base, multiclass_output = False, planta=None, diag=None, exclusive_diag = False):
 
     """
     Si no se especifican los parámetros "planta" y "diag", la función asume que queremos considerar
     todas las plantas y diagnósticos de fallos disponibles en el archivo.
+
+    Asímismo, también se encuentra disponible el parámetro "exclusive_diag" donde:
+        - exclusive_diag = True ------> Solo se consideran fallos y no fallos del "diag" especificado
+        - exclusive_diag = False (default)  -----> Se consideran como fallos la lista de "diag" entregada
+                                                   y como no fallos se considera la totalidad del resto
+                                                   de la base de datos.
+
+    Ejemplo de configuración:
+
+        1) Datos cuyo diag sean 345 (multicategorico False) EXCLUSIVO de las plantas br02 y br03:
+            >> train_test_data(df_fallos_base, multiclass_output = False, planta=['br02', 'br03'], diag=[345], exclusive_diag = True)
+
+        2) Datos cuyo diag sea 345 (multicategorico False) EXCLUSIVO sin importar de qué planta se saquen
+            >> train_test_data(df_fallos_base, multiclass_output = False, planta=None, diag=[345], exclusive_diag = True)
+
+
+        3) Datos cuyo diag sean 345, 201, 202 (se recomienda multicategorico True dependiendo del uso) de las plantas br02 y br03:
+            >> train_test_data(df_fallos_base, multiclass_output = True, planta=['br02', 'br03'], diag=[345, 201, 202], exclusive_diag = False)
+
     """
 
     if diag is None:
@@ -251,6 +275,9 @@ def train_test_data(df_fallos_base, multiclass_output = False, planta=None, diag
 
     enc = OneHotEncoder(sparse_output=False)
     df_fallos["Categorical_Encoded"] = enc.fit_transform(df_fallos["categorical"].to_numpy().reshape(-1, 1)).tolist()
+
+    if exclusive_diag is True:
+        df_fallos = df_fallos[df_fallos_base["diag"].isin(diag)]
 
     num_casos = df_fallos['id_caso'].nunique()
     num_fallos = df_fallos[df_fallos['fallo']]['id_caso'].nunique()
