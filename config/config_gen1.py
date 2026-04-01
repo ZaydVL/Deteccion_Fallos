@@ -6,7 +6,7 @@ CONFIG = config_global.ConfigGlobal()
 
 # Plantas que se consideran.
 #plantas = CONFIG.plantas_all; name_planta = None
-name_planta = 'br03'
+name_planta = 'br02'
 plantas = [ name_planta ]
 
 # Tipos de dispositivos que se consideran.

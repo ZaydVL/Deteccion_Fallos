@@ -1,4 +1,5 @@
 # pip install keras tensorflow
+#%%
 import os
 
 import keras
@@ -196,9 +197,9 @@ def generar_datos_aprendizaje(df_fallos_base, planta, diag):
     num_casos = df_fallos['id_caso'].nunique()
     num_fallos = df_fallos['id_fallo'].nunique()
     print(f'Número de casos con diagnóstico {diag}/{diag_txt}: {num_casos} total ({num_casos-num_fallos} sanos, {num_fallos} fallos)')
-    #if num_casos < 2 or num_fallos < 2:
-    #    print(f'No hay suficientes casos o fallos para entrenar un modelo. Número de casos: {num_casos}, número de fallos: {num_fallos}')
-    #    return None
+    if num_casos < 2 or num_fallos < 2:
+        print(f'No hay suficientes casos o fallos para entrenar un modelo. Número de casos: {num_casos}, número de fallos: {num_fallos}')
+        return None
 
     df_train, df_test = separar_df_train_test(df_fallos, frac_train=0.8)
     X_train, y_train, id_casos_train = extraer_xy_df(df_train)
@@ -262,6 +263,9 @@ def train_test_data(df_fallos_base, multiclass_output = False, planta=None, diag
         planta = ['pvet-'+ i for i in planta]
 
     df_fallos = df_fallos_base.copy()
+    if exclusive_diag is True:
+        df_fallos = df_fallos[df_fallos_base["diag"].isin(diag)]
+    
     new_fallo = df_fallos_base["fallo"] & df_fallos_base["diag"].isin(diag) & df_fallos_base["planta"].isin(planta)
     df_fallos["fallo"] = new_fallo
     diag_txt = df_fallos[df_fallos['fallo']]['diag_txt'].unique()
@@ -269,19 +273,18 @@ def train_test_data(df_fallos_base, multiclass_output = False, planta=None, diag
 
     if multiclass_output is True:
         df_fallos['diag'] = np.where(df_fallos['fallo'] == False, 0, df_fallos['diag'])
-        categorical_label = np.unique(df_fallos['diag']) 
-        map = {clase: idx for idx, clase in enumerate(categorical_label)}
+        map = {clase: idx for idx, clase in enumerate(np.unique(df_fallos['diag']))}
         df_fallos["categorical"] = np.vectorize(map.get)(df_fallos['diag'])
+        enc = OneHotEncoder(sparse_output=False)
+        df_fallos["Categorical_Encoded"] = enc.fit_transform(df_fallos["categorical"].to_numpy().reshape(-1, 1)).tolist()
 
-    enc = OneHotEncoder(sparse_output=False)
-    df_fallos["Categorical_Encoded"] = enc.fit_transform(df_fallos["categorical"].to_numpy().reshape(-1, 1)).tolist()
-
-    if exclusive_diag is True:
-        df_fallos = df_fallos[df_fallos_base["diag"].isin(diag)]
+        num_clases = df_fallos['categorical'].nunique()
+    else:
+        num_clases = 2
 
     num_casos = df_fallos['id_caso'].nunique()
     num_fallos = df_fallos[df_fallos['fallo']]['id_caso'].nunique()
-    num_clases = df_fallos['categorical'].nunique()
+    
     print(f'Número de casos con diagnóstico {diag}/{list(diag_txt)}: {num_casos} total | ({num_casos-num_fallos} sanos + otros fallos| {num_fallos} fallos)')
     
     if num_casos < 2 or num_fallos < 2:
@@ -407,3 +410,5 @@ def evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros):
                 #plt.show()
                 plt.close()
         df_info_pruebas.to_csv(f"{patrón_ficheros}-info-pruebas.csv", index=False)
+
+# %%

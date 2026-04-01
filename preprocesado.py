@@ -146,7 +146,7 @@ def obtener_datos_casos(cliente_sql:ClientePostgres, cliente_influx:ClienteInflu
     CONFIG = config_global.ConfigGlobal()
     nom_tabla_fallos = 'DDA_DIA'
     tabla_disp = f'vop_{tipo_disp}'.lower()
-    filtro_interés = f"Type = '{tipo_disp}' AND ope_ck = 1"
+    filtro_interés = f"Type = '{tipo_disp}' AND ope_ck > 0"
     if diag_interés is not None:
         if isinstance(diag_interés, int):
             filtro_interés += f" AND diag = {diag_interés}"
