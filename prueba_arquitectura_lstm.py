@@ -34,7 +34,6 @@ from tensorflow.keras import regularizers
 from rutinas_rn import cargar_datos, generar_datos_aprendizaje, dibujar_historial, evaluar_modelo, train_test_data
 
 
-
 class HiperModelo(keras_tuner.HyperModel):
     def __init__(self, X_shape, num_clases):
         self.X_shape = X_shape
@@ -80,12 +79,12 @@ def crear_modelo_lstm1(hp, X_shape, num_clases):
 
     return modelo
 
-def crear_modelo_lst_QPV(hp, X_shape, num_clases):
+def crear_modelo_lstm_QPV(X_shape, num_clases):
 
     if CONFIG.depurar or True:
         print(f'crear_modelo1(): X_shape={X_shape}, num_clases={num_clases}')
     input_layer = Input(shape=(X_shape[1], X_shape[2]))
-    units_LSTM = 50
+    units_LSTM = 0.2
     val_dropout = 0.2
     num_dense = 1
 
@@ -198,6 +197,6 @@ def main1(args, multiclass=False):
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        main1(["config/config_rn1.py"], multiclass=True)
+        main1(["config/config_rn1.py"], multiclass=False)
     else:
         main1(sys.argv[1:])

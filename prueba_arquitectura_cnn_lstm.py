@@ -1,5 +1,5 @@
 
-
+#%%
 import sys
 import os
 import config_global
@@ -89,10 +89,11 @@ def crear_modelo_cnn_lstm(hp, X_shape, num_clases):
 
 
 
-def crear_modelo_cnn_lstm_QPV(hp, X_shape, num_clases):
+def crear_modelo_cnn_lstm_QPV(X_shape, num_clases):
 
     if CONFIG.depurar or True:
         print(f'crear_modelo1(): X_shape={X_shape}, num_clases={num_clases}')
+
     input_layer = Input(shape=(X_shape[1], 1, X_shape[3], 1))
     filters_cnn_lstm = 64
     val_dropout = 0.2
@@ -117,13 +118,12 @@ def crear_modelo_cnn_lstm_QPV(hp, X_shape, num_clases):
         TimeDistributed(Dense(
             num_dense,
             activation  = 'sigmoid',
-        )),
-        Dense(num_clases, activation="softmax")
+        ))
     ])
 
     modelo.compile(
         optimizer=keras.optimizers.Adam(),
-        loss='sparse_categorical_crossentropy',
+        loss='binary_crossentropy',
         metrics=['accuracy']
     )
 
@@ -179,7 +179,13 @@ def main1(args, multiclass=False):
         print("No se han consegudio entrenar el modelo por falta de datos de aprendizaje.")
         return None
     
-    hipermodelo = HiperModelo(datos_aprendizaje['X_train'].shape, num_clases=datos_aprendizaje['num_clases'])
+    ## Reshape a los datos de entrenamiento para lograr coincidencia dimensional (entre la entrada de la CNN-LSTM 2D y los tensores de datos)
+
+    X_train = datos_aprendizaje['X_train'].reshape(datos_aprendizaje["X_train"].shape[0], datos_aprendizaje["X_train"].shape[1], 1, datos_aprendizaje["X_train"].shape[2], 1)
+    X_test = datos_aprendizaje['X_test'].reshape(datos_aprendizaje["X_test"].shape[0], datos_aprendizaje["X_test"].shape[1], 1, datos_aprendizaje["X_test"].shape[2], 1)
+
+
+    hipermodelo = HiperModelo(X_train.shape, num_clases=datos_aprendizaje['num_clases'])
     
     tuner = keras_tuner.BayesianOptimization(
         hypermodel=hipermodelo,
@@ -191,10 +197,6 @@ def main1(args, multiclass=False):
         project_name=f'tuning-rn1-{str(CONFIG.plantas)}-{str(CONFIG.diags):03}'
     )
 
-    ## Reshape a los datos de entrenamiento para lograr coincidencia dimensional (entre la entrada de la CNN-LSTM 2D y los tensores de datos)
-
-    X_train = datos_aprendizaje['X_train'].reshape(datos_aprendizaje["X_train"].shape[0], datos_aprendizaje["X_train"].shape[1], 1, datos_aprendizaje["X_train"].shape[2], 1)
-    X_test = datos_aprendizaje['X_test'].reshape(datos_aprendizaje["X_test"].shape[0], datos_aprendizaje["X_test"].shape[1], 1, datos_aprendizaje["X_test"].shape[2], 1)
 
     tuner.search_space_summary(extended=True)
     tuner.search(datos_aprendizaje['X_train'], datos_aprendizaje['y_train'],
@@ -216,10 +218,11 @@ def main1(args, multiclass=False):
     evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros=patrón_ficheros)
     print('\n' * 5)
 
+
 #%%
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        main1(["config/config_rn1.py"], multiclass=True)
+        main1(["config/config_rn1.py"], multiclass=False)
     else:
         main1(sys.argv[1:])

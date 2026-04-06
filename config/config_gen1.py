@@ -5,9 +5,8 @@ import config_global
 CONFIG = config_global.ConfigGlobal()
 
 # Plantas que se consideran.
-#plantas = CONFIG.plantas_all; name_planta = None
-name_planta = 'br02'
-plantas = [ name_planta ]
+plantas = CONFIG.plantas_all; name_planta = None
+#name_planta = 'br03' ; plantas = [ name_planta ]
 
 # Tipos de dispositivos que se consideran.
 #tipos_disp = CONFIG.tipos_disp_all
@@ -39,7 +38,7 @@ tipos_disp = [ 'ST', 'IN', 'TR', 'SB', 'CT' ]
 
 # Fichero donde se guardarán los ficheros generados.
 if name_planta is None:
-    fich_salida = fich_salida = 'datos/prueba1.csv'
+    fich_salida = 'datos/Datos_All_plantas.csv'
 else:
     fich_salida = 'datos/planta_{}.csv'.format(name_planta)
 

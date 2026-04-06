@@ -4,12 +4,29 @@
 import config_global
 CONFIG = config_global.ConfigGlobal()
 
-plantas = CONFIG.plantas_all
-tipos_disp = [ 'ST' ]
 
-#diags = [ 201, 200, 242, 222 ]
-diags = [ 201, 222, 200, 221 ]
-#diags = [ 246, 242, 245, 241 ]
+plantas = ['br02','br03']
+tipos_disp = [ 'ST', 'IN', 'TR', 'SB', 'CT' ]
+
+diags = [ 260 ]
+#### PLANTA br02 ######
+#diags = [ 201 ]    ---- 0 fallos 
+#diags = [ 221 ]    ---- 2 fallos
+#diags = [ 241 ]    ---- 2 fallos 
+#diags = [ 242 ]    ---- 0 fallos
+#diags = [ 246 ]    ---- 2 fallos
+#diags = [ 260 ]    ---- 91 fallos
+
+
+
+#### PLANTA br03 ######
+#diags = [ 201 ]    ---- 0 fallos 
+#diags = [ 221 ]    ---- 6 fallos
+#diags = [ 241 ]    ---- 8 fallos
+#diags = [ 242 ]    ---- 0 fallos 
+#diags = [ 246 ]    ---- 25 fallos 
+#diags = [ 260 ]    ---- 14 fallos
+
 
 
 # Semilla para generadores de números pseudoaleatorios
@@ -17,7 +34,7 @@ semilla = 42
 
 # Ficheros con los datos de entrenamiento y validación.
 # Pueden usarse {planta} y {tipo_disp} si están en ficheros separados.
-fich_datos = 'datos/planta_br02.csv'
+fich_datos = 'datos/Datos_All_plantas.csv'
 
 # Directorios donde se guardarán los ficheros generados.
 # Pueden usarse {planta} y {tipo_disp} como patrón.
