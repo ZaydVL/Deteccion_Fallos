@@ -31,7 +31,7 @@ class HiperModelo(keras_tuner.HyperModel):
         self.num_clases = num_clases
 
     def build(self, hp):
-        return crear_modelo1(hp, self.X_shape, self.num_clases)
+        return crear_QPV_hyper(hp, self.X_shape, self.num_clases)
 
 ###################################################################
 
@@ -56,6 +56,27 @@ def crear_modelo1(hp, X_shape, num_clases):
         Flatten(),
         Dense(num_dense, activation='relu'),
         Dropout(val_dropout),
+        Dense(num_clases, activation='softmax')
+    ])
+    modelo.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    return modelo
+
+###################################################################
+
+def crear_QPV_hyper(hp, X_shape, num_clases):
+    if CONFIG.depurar or True:
+        print(f'crear_modelo1(): X_shape={X_shape}, num_clases={num_clases}')
+    input_layer = Input(shape=(X_shape[1], X_shape[2]))
+    num_filtros = hp.Choice("filters", [8, 16, 32, 64, 128, 256, 512]) 
+    #tam_núcleo = hp.Int("kernel_size", min_value=3, max_value=15, step=2)
+    val_dropout = hp.Float("dropout", min_value=0.0, max_value=0.4, step=0.1)
+    num_dense = hp.Int("dense_units", min_value=2, max_value=10, step=1)
+    modelo = Sequential([
+        input_layer,
+        Conv1D(filters=num_filtros, kernel_size=3, activation='relu', padding='same'),
+        GlobalMaxPooling1D(),
+        Dropout(val_dropout),
+        Dense(num_dense, activation='sigmoid'),
         Dense(num_clases, activation='softmax')
     ])
     modelo.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
@@ -207,9 +228,9 @@ def main2(args, multiclass=False):
     df_fallos_base = df_fallos.copy()
 
     keras.utils.set_random_seed(CONFIG.semilla)
-    patrón_ficheros = f'{dir_resultados}/res-cnn-{str(CONFIG.diags):03}'
+    patrón_ficheros = f'{dir_resultados_planta}/res-cnn-{str(CONFIG.diags):03}'
 
-    datos_aprendizaje = train_test_data(df_fallos_base, multiclass_output=multiclass, planta=CONFIG.plantas, diag=CONFIG.diags)
+    datos_aprendizaje = train_test_data(df_fallos_base, multiclass_output=multiclass, planta=CONFIG.plantas, diag=CONFIG.diags, exclusive_diag=True)
 
     if datos_aprendizaje is None:
         print("No se han consegudio entrenar el modelo por falta de datos de aprendizaje.")
@@ -242,6 +263,9 @@ def main2(args, multiclass=False):
     #ver_mapas(modelo)
 
     dibujar_historial(historia, patrón_ficheros=patrón_ficheros)
+
+    datos_aprendizaje['df_fallos'] = datos_aprendizaje['df_fallos'][datos_aprendizaje['df_fallos'].diag.isin(CONFIG.diags)]
+
 
     evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros=patrón_ficheros)
     print('\n' * 5)
@@ -283,8 +307,7 @@ def mainQPV(args, multiclass=False):
         print("No se han consegudio entrenar el modelo por falta de datos de aprendizaje.")
         return None
     
-    modelo = crear_QPV(datos_aprendizaje['X_train'].shape, num_clases = datos_aprendizaje['num_clases'] )
-
+    modelo = crear_QPV(X_shape=datos_aprendizaje['X_train'].shape, num_clases= datos_aprendizaje["num_clases"])
     print(modelo.summary())
     keras.utils.plot_model(modelo, show_shapes=True, to_file=f'{patrón_ficheros}-modelo.png')
 

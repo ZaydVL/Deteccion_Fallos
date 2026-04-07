@@ -40,7 +40,7 @@ class HiperModelo(keras_tuner.HyperModel):
         self.num_clases = num_clases
 
     def build(self, hp):
-        return crear_modelo_lstm1(hp, self.X_shape, self.num_clases)
+        return crear_modelo_lstm_QPV_hyper(hp, self.X_shape, self.num_clases)
 
 def crear_modelo_lstm1(hp, X_shape, num_clases):
 
@@ -95,6 +95,25 @@ def crear_modelo_lstm_QPV(X_shape, num_clases):
     modelo.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     return modelo
 
+def crear_modelo_lstm_QPV_hyper(hp, X_shape, num_clases):
+    units_LSTM = hp.Choice("filters", [5, 25, 50, 75, 100, 125]) 
+    val_dropout = hp.Float("dropout", min_value=0.0, max_value=0.4, step=0.1)
+    num_dense = hp.Int("dense_units", min_value=16, max_value=256, step=16)
+    modelo = Sequential([
+        LSTM(
+            units=units_LSTM,
+            return_sequences=False,
+            activation='tanh',
+            recurrent_activation='sigmoid',
+            input_shape=(X_shape[1], X_shape[2]) 
+        ),
+        Dropout(val_dropout),
+        Dense(num_clases, activation='sigmoid')
+    ])
+
+    modelo.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    return modelo
+
 
 def entrenar_modelo(modelo, X_train, y_train, X_test, y_test, epochs=200, batch_size=16):
     # Parada temprana cuando la pérdida de validación sea suficientemente baja
@@ -139,7 +158,7 @@ def main1(args, multiclass=False):
     keras.utils.set_random_seed(CONFIG.semilla)
     patrón_ficheros = f'{dir_resultados_planta}/res-lstm-{str(CONFIG.diags):03}'
 
-    datos_aprendizaje = train_test_data(df_fallos_base, multiclass_output=multiclass, planta=CONFIG.plantas, diag=CONFIG.diags)
+    datos_aprendizaje = train_test_data(df_fallos_base, multiclass_output=multiclass, planta=CONFIG.plantas, diag=CONFIG.diags, exclusive_diag=True)
 
     if datos_aprendizaje is None:
         print("No se han consegudio entrenar el modelo por falta de datos de aprendizaje.")

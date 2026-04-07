@@ -407,10 +407,13 @@ def evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros):
                     #print(df)
                     #print(df.info())
                 #dibujar_fallo(df_test[df_test['id_caso'] == id_caso], gráfica, tipo_comparación='PROMEDIO')
-                dibujar_fallo(df_fallos[df_fallos['id_fallo'] == id_fallo], gráfica, comentario=comentario, tipo_comparación='PROMEDIO')
-                plt.savefig(f'{patrón_ficheros}-fallo-{id_fallo}.png', dpi=300)
-                #plt.show()
-                plt.close()
+                try: 
+                    dibujar_fallo(df_fallos[df_fallos['id_fallo'] == id_fallo], gráfica, comentario=comentario, tipo_comparación='PROMEDIO')
+                    plt.savefig(f'{patrón_ficheros}-fallo-{id_fallo}.png', dpi=300)
+                    #plt.show()
+                    plt.close()
+                except:
+                    continue
         df_info_pruebas.to_csv(f"{patrón_ficheros}-info-pruebas.csv", index=False)
 
 # %%

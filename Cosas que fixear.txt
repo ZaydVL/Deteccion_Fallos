@@ -1,0 +1,13 @@
+1. Al considerar exclusive_diag = False se consideran el resto de fallos como casos "sanos" si fuese necesario.
+    y en esta situación se mantienen los id_fallos activos del resto de fallos que no son relevantes. Entonces 
+    al momento de utilizar la función "evaluar_modelo" se llama dentro el ella a la función "dibujar fallo"
+    a la cual se le pasa como parámetro el dataframe donde coincídan los id_fallo correspondiente de forma iterativa. 
+    Una vez dentro, se realiza:
+            id_fallo = df['id_fallo'].iloc[0]
+            datos_disp_fallo = df[df['fallo'] == True]
+            disp_fallo = datos_disp_fallo['pvet_disp'].iloc[0]
+    en el cual se filtra aquellos que son fallos == True pero recordemos que al utilizar exclusive_diag = False pues
+    generará que muchos de los fallos True anclados a su id_fallo se vuelvan F. Entonces, de esta forma se tendría que 
+    tal vez arrelgar la función train_split_data o la función dibujar fallo para que solo tome los id_fallo del diag
+    interesado (hacer redundancia en eso para que solo grafique aquellos que interesan y pasar desapersivido el resto ya
+    que el aumentar la cantidad de casos sanos metiendo otros diags solo tiene importancia en el entrenamiento)

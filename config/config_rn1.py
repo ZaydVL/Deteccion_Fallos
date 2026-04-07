@@ -8,7 +8,7 @@ CONFIG = config_global.ConfigGlobal()
 plantas = CONFIG.plantas_all
 tipos_disp = [ 'ST', 'IN', 'TR', 'SB', 'CT' ]
 
-diags = [ 221 ]
+diags = [ 246 ] 
 #### PLANTA br02 ######
 #diags = [ 201 ]    ---- 0 fallos 
 #diags = [ 221 ]    ---- 2 fallos
