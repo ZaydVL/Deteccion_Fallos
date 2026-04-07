@@ -5,10 +5,10 @@ import config_global
 CONFIG = config_global.ConfigGlobal()
 
 
-plantas = ['br02','br03']
+plantas = CONFIG.plantas_all
 tipos_disp = [ 'ST', 'IN', 'TR', 'SB', 'CT' ]
 
-diags = [ 260 ]
+diags = [ 221 ]
 #### PLANTA br02 ######
 #diags = [ 201 ]    ---- 0 fallos 
 #diags = [ 221 ]    ---- 2 fallos

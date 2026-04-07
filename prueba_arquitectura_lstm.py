@@ -80,36 +80,19 @@ def crear_modelo_lstm1(hp, X_shape, num_clases):
     return modelo
 
 def crear_modelo_lstm_QPV(X_shape, num_clases):
-
-    if CONFIG.depurar or True:
-        print(f'crear_modelo1(): X_shape={X_shape}, num_clases={num_clases}')
-    input_layer = Input(shape=(X_shape[1], X_shape[2]))
-    units_LSTM = 0.2
-    val_dropout = 0.2
-    num_dense = 1
-
     modelo = Sequential([
-        input_layer,
         LSTM(
-            units = units_LSTM,
-            return_sequences = True,
-            activation = 'tanh',
-            recurrent_activation = 'sigmoid',
+            units=50,
+            return_sequences=False,
+            activation='tanh',
+            recurrent_activation='sigmoid',
+            input_shape=(X_shape[1], X_shape[2])  # ← aquí directamente
         ),
-        Dropout(val_dropout),
-        TimeDistributed(Dense(
-            num_dense,
-            activation  = 'sigmoid',
-        )),
-        Dense(num_clases, activation="softmax")
+        Dropout(0.2),
+        Dense(num_clases, activation='sigmoid')
     ])
 
-    modelo.compile(
-        optimizer=keras.optimizers.Adam(learning_rate=5e-4),
-        loss='sparse_categorical_crossentropy',
-        metrics=['accuracy']
-    )
-
+    modelo.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     return modelo
 
 
@@ -193,10 +176,70 @@ def main1(args, multiclass=False):
     evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros=patrón_ficheros)
     print('\n' * 5)
 
+
+
+def mainQPV(args, multiclass=False):
+    config_global.ConfigGlobal('config/config_gen1.py')
+    CONFIG = config_global.ConfigGlobal(args[0])
+    print(f'CONFIG usada:\n{CONFIG}')
+    nom_fich_datos = CONFIG.fich_datos
+    dir_resultados = CONFIG.dir_resultados
+    
+    if not os.path.exists(dir_resultados):
+        os.makedirs(dir_resultados)
+    with open(f'{dir_resultados}/config_usada.txt', 'w') as f:
+        f.write(str(CONFIG) + '\n')
+
+    file_name = str()
+    for i in CONFIG.plantas:
+        file_name += '_' + i   
+
+    dir_resultados_planta = dir_resultados.replace('{planta}', file_name)
+    if not os.path.exists(dir_resultados_planta):
+        os.makedirs(dir_resultados_planta)
+
+    df_fallos = cargar_datos(CONFIG, planta=None)
+    
+    if df_fallos is None:
+        print(f'No existen datos disponibles en {nom_fich_datos}')
+
+    df_fallos_base = df_fallos.copy()
+
+    keras.utils.set_random_seed(CONFIG.semilla)
+    patrón_ficheros = f'{dir_resultados_planta}/res-lstm-{str(CONFIG.diags):03}'
+
+    datos_aprendizaje = train_test_data(df_fallos_base, multiclass_output=multiclass, planta=CONFIG.plantas, diag=CONFIG.diags, exclusive_diag=True)
+
+    if datos_aprendizaje is None:
+        print("No se han consegudio entrenar el modelo por falta de datos de aprendizaje.")
+        return None
+    
+    modelo = crear_modelo_lstm_QPV(datos_aprendizaje['X_train'].shape, num_clases = datos_aprendizaje['num_clases'] )
+
+    print(modelo.summary())
+    keras.utils.plot_model(modelo, show_shapes=True, to_file=f'{patrón_ficheros}-modelo.png')
+
+    historia = entrenar_modelo(modelo, datos_aprendizaje['X_train'], datos_aprendizaje['y_train'], datos_aprendizaje['X_test'], datos_aprendizaje['y_test'])
+
+    #ver_mapas(modelo)
+
+    dibujar_historial(historia, patrón_ficheros=patrón_ficheros)
+
+    evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros=patrón_ficheros)
+    print('\n' * 5)
+
+
 #%%
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         main1(["config/config_rn1.py"], multiclass=False)
+    else:
+        main1(sys.argv[1:])
+
+
+if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        mainQPV(["config/config_rn1.py"], multiclass=False)
     else:
         main1(sys.argv[1:])
