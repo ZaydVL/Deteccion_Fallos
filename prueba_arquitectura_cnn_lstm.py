@@ -22,7 +22,7 @@ logging.getLogger('tensorflow').setLevel(logging.FATAL)
 from datetime import datetime, timedelta
 
 from keras.layers import Layer, Concatenate, GlobalAveragePooling1D, BatchNormalization, LeakyReLU
-from keras.layers import Input, Flatten, LSTM, Dense, Dropout, MaxPooling1D, Conv1D, TimeDistributed, ConvLSTM2D, TimeDistributed
+from keras.layers import Input, Flatten, LSTM, Dense, Dropout, MaxPooling1D, Conv1D, TimeDistributed, ConvLSTM2D
 from keras.models import Model, Sequential
 from keras.callbacks import EarlyStopping
 
