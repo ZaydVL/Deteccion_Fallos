@@ -1,6 +1,6 @@
 
 # ———————————————— Librerías ——————————————————————————————————————————————————————
-
+#%%
 import importlib
 import sys
 import os
@@ -14,7 +14,8 @@ import matplotlib.pyplot as plt
 import keras_tuner
 import tensorflow as tf
 
-from rutinas_rn import cargar_datos, cargar_datos_sanos_mas_cercanos, generar_datos_aprendizaje, dibujar_historial, evaluar_modelo, permutation_importance_model, F1ScoreMetric
+from rutinas_rn import cargar_datos, generar_datos_aprendizaje, dibujar_historial, evaluar_modelo
+# from rutinas import permutation_importance_model, cargar_datos_sanos_mas_cercanos
 
 from keras import Model
 from keras.layers import Conv1D, Dense, Dropout, Input, Concatenate, GlobalMaxPooling1D, MaxPooling1D, Flatten, BatchNormalization, GlobalAveragePooling1D, LSTM, ConvLSTM2D
@@ -33,7 +34,7 @@ from pyts.image import MarkovTransitionField, RecurrencePlot, GramianAngularFiel
 from tensorflow.keras.layers import (Conv2D, MaxPooling2D, GlobalAveragePooling2D, BatchNormalization, Dropout, Dense, Input)
 from sklearn.preprocessing import KBinsDiscretizer
 
-CONFIG = config_global.ConfigGlobal()
+#CONFIG = config_global.ConfigGlobal()
 os.environ["KERAS_BACKEND"] = "tensorflow"
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # 0=DEBUG, 1=INFO, 2=WARNING, 3=ERROR
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
@@ -81,8 +82,6 @@ class Hipermodelo(keras_tuner.HyperModel):
 
 
 def Modelo_QPV_LSTM(hp, X_shape, num_clases):
-    if CONFIG.depurar or True:
-        print(f'crear_modelo(): X_shape={X_shape}, num_clases={num_clases}')
     units_LSTM = hp.Choice("filters", [5, 25, 50, 75, 100, 125]) 
     val_dropout = hp.Float("dropout", min_value=0.0, max_value=0.4, step=0.1)
     lr = hp.Choice('lr', [1e-4, 1e-5])
@@ -115,8 +114,6 @@ def Modelo_QPV_LSTM(hp, X_shape, num_clases):
 
 
 def Modelo_QPV_Conv1D(hp, X_shape, num_clases):
-    if CONFIG.depurar or True:
-        print(f'crear_modelo(): X_shape={X_shape}, num_clases={num_clases}')
     input_layer = Input(shape=(X_shape[1], X_shape[2]))
     num_filtros = hp.Choice("filters", [8, 16, 32, 64, 128, 256, 512]) 
     tam_núcleo = hp.Int("kernel_size", min_value=3, max_value=10, step=2)
@@ -147,9 +144,6 @@ def Modelo_QPV_Conv1D(hp, X_shape, num_clases):
 
 
 def Modelo_QPV_ConvLSTM2D(hp, X_shape, num_clases):
-
-    if CONFIG.depurar or True:
-        print(f'crear_modelo(): X_shape={X_shape}, num_clases={num_clases}')
     input_layer = Input(shape=(X_shape[1], 1, X_shape[3], 1))
     filters_cnn_lstm = hp.Choice("filters", [8, 16, 32, 64, 128])
     kernel_size = (1,3)
@@ -196,9 +190,33 @@ def Modelo_QPV_ConvLSTM2D(hp, X_shape, num_clases):
 
 
 def Modelo_PVOP_personalizado1(hp, X_shape, num_clases):
-
+    """
+    AQUI SE PUEDE CREAR UN MODELO PERSONALIZADO PARA EVALUAR
+    CON LA CONDICIÓN QUE LUEGO DEBE AGREGARSE EN EL DICCIONARIO INFERIOR 
+    LLAMADO "MODELOS" JUNTO CON UNA FUNCIÓN ANÓNIMA QUE DESCRIBA CÓMO SERÁN
+    INTRODUCIDOS SUS DATOS DE ENTRADA (DIMENSIONES QUE VARIARÁN DE ACUERDO A CADA MODELO)
+    """
     return None
 
+
+MODELOS = {
+    "LSTM": {
+        "model": Modelo_QPV_LSTM,
+        "preprocesar": lambda X: X  
+    },
+    "Conv1D": {
+        "model": Modelo_QPV_Conv1D,
+        "preprocesar": lambda X: X  
+    },
+    "ConvLSTM2D": {
+        "model": Modelo_QPV_ConvLSTM2D,
+        "preprocesar": lambda X: X[:, :, np.newaxis, :, np.newaxis] 
+    },
+    "Modelo_PVOP": {
+        "model": Modelo_PVOP_personalizado1,
+        "preprocesar": lambda X: X  
+    },
+}
 
 # —————————————————————————————————————————————————————————————————————————————————
 
@@ -242,6 +260,31 @@ class MatthewsCorrelationCoefficient(Metric):
         self.tn.assign(0)
         self.fp.assign(0)
         self.fn.assign(0)
+
+class F1ScoreMetric(Metric):
+    def __init__(self, name='f1_score', **kwargs):
+        super(F1ScoreMetric, self).__init__(name=name, **kwargs)
+        self.precision = tf.keras.metrics.Precision()
+        self.recall = tf.keras.metrics.Recall()
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        y_true_labels = tf.argmax(y_true, axis=1)
+        y_pred_labels = tf.argmax(y_pred, axis=1)
+        self.precision.update_state(y_true_labels, y_pred_labels, sample_weight)
+        self.recall.update_state(y_true_labels, y_pred_labels, sample_weight)
+    
+    def result(self):
+        p = self.precision.result()
+        r = self.recall.result()
+        return tf.cond(
+            tf.math.equal(p + r, 0.0),
+            lambda: 0.0,
+            lambda: 2 * (p * r) / (p + r)
+        )
+
+    def reset_states(self):
+        self.precision.reset_states()
+        self.recall.reset_states()
 
 
 
@@ -292,9 +335,9 @@ def transformar_markov(X, discretizers):
             X_markov[i, :, :, f] /= row_sums
     return X_markov
 
-def entrenar_modelo(modelo, X_train, y_train, X_test, y_test, epochs=200, batch_size=32):
+def entrenar_modelo(modelo, X_train, y_train, X_test, y_test, epochs=200, batch_size=32, patience = 5):
 
-    early_stop = EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, restore_best_weights=True)
+    early_stop = EarlyStopping(monitor='val_loss', patience=patience, min_delta=0.001, restore_best_weights=True)
     history = modelo.fit(
         X_train, y_train,
         epochs=epochs,
@@ -310,28 +353,9 @@ def entrenar_modelo(modelo, X_train, y_train, X_test, y_test, epochs=200, batch_
 # ———————— Búsqueda y entrenamiento de modelo  ————————————————————————————————————
 
 
-MODELOS = {
-    "LSTM": {
-        "model": Modelo_QPV_LSTM,
-        "preprocesar": lambda X: X  
-    },
-    "Conv1D": {
-        "model": Modelo_QPV_Conv1D,
-        "preprocesar": lambda X: X  
-    },
-    "ConvLSTM2D": {
-        "model": Modelo_QPV_ConvLSTM2D,
-        "preprocesar": lambda X: X[:, :, np.newaxis, :, np.newaxis] 
-    },
-    "Modelo_PVOP": {
-        "model": Modelo_PVOP_personalizado1,
-        "preprocesar": lambda X: X  
-    },
-}
-
 
 def cargar_config(args):
-    config_global.ConfigGlobal('config/config_gen1.py')
+    config_global.ConfigGlobal('config/config_gen2.py')
     CONFIG = config_global.ConfigGlobal(args[0])
     print(f'CONFIG usada:\n{CONFIG}')
     return CONFIG
@@ -347,23 +371,24 @@ def preparar_directorio_planta(CONFIG, nombre_grupo):
     with open(f'{dir_resultados}/config_usada.txt', 'w') as f:
         f.write(str(CONFIG) + '\n')
     return dir_resultados
- 
- 
+
+
 def construir_patron_ficheros(dir_resultados, nombre_grupo, nombre_modelo, tipo_disp, diag, transform_type):
     """
     Construye el prefijo de rutas para guardar resultados.
     Ejemplo: resultados/planta_A/res-cnn2d/gramian/res-cnn2d-inversor-001-gramian
-    """
-    base = os.path.join(dir_resultados, f'{nombre_modelo}', transform_type)
+    """    
+    transform_str = transform_type if transform_type else 'sin_transform'  # ← fix None
+    base = os.path.join(dir_resultados, f'{nombre_modelo}', transform_str)
     os.makedirs(base, exist_ok=True)
     patron = os.path.join(base, f'{nombre_modelo}')
     if tipo_disp:
         patron += f'-{tipo_disp}'
     if diag:
         patron += f'-{int(diag):03}'
-    patron += f'-{transform_type}'
+    patron += f'-{transform_str}'
     return patron
- 
+
  
 # ─────────────────────────────────────────────────────────────────────────────
 # GRUPOS DE PLANTAS E ITERACIONES
@@ -392,7 +417,7 @@ def construir_grupos_plantas(CONFIG):
     else:
         raise ValueError(f"modo_agregacion desconocido: '{modo}'")
  
- 
+
 def obtener_iteraciones(CONFIG):
     """
     Devuelve lista de tuplas (tipo_disp, diag) según nivel_iteracion:
@@ -401,23 +426,24 @@ def obtener_iteraciones(CONFIG):
         'por_tipo_disp_diag'→ [('inversor', '1'), ('inversor', '2'), ('panel', '3'), ...]
     """
     nivel = CONFIG.nivel_iteracion
- 
+
     if nivel == 'por_diag':
-        return [(None, d) for d in CONFIG.diags_lista]
- 
+        # Aplana el dict de diags en una lista única sin duplicados
+        diags_lista = list({d for diags in CONFIG.diags.values() for d in diags})
+        return [(None, d) for d in sorted(diags_lista)]
+
     elif nivel == 'por_tipo_disp':
         return [(t, None) for t in CONFIG.tipos_disp]
- 
+
     elif nivel == 'por_tipo_disp_diag':
         return [
             (tipo, diag)
             for tipo in CONFIG.tipos_disp
             for diag in CONFIG.diags.get(tipo, [])
         ]
- 
+
     else:
-        raise ValueError(f"nivel_iteracion desconocido: '{nivel}'")
-    
+        raise ValueError(f"nivel_iteracion desconocido: '{nivel}'")    
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TRANSFORMADAS 2D
@@ -452,31 +478,46 @@ def cargar_datos_planta(CONFIG, planta, tipo_disp):
     Carga el DataFrame de una planta (y opcionalmente un tipo de dispositivo).
     Devuelve None si no existen datos.
     """
-    fich = CONFIG.fich_datos.replace('{planta}', planta)
-    if tipo_disp:
+    fich = CONFIG.fich_datos
+
+    if '{planta}' in fich:
+        fich = fich.replace('{planta}', planta)
+    if '{tipo_disp}' in fich and tipo_disp:
         fich = fich.replace('{tipo_disp}', tipo_disp)
- 
-    dir_fich = os.path.dirname(fich)
-    if os.path.basename(fich) not in os.listdir(dir_fich):
-        print(f"  No hay fichero para planta={planta}, tipo_disp={tipo_disp}")
+
+    fich = os.path.abspath(fich)
+
+    if not os.path.exists(fich):
+        print(f"  No hay fichero: {fich}")
         return None
- 
-    df = cargar_datos_sanos_mas_cercanos(
-        CONFIG,
-        nom_fich_datos=fich,
-        planta=planta,
-        max_casos_sanos=CONFIG.max_disp_sanos_por_fallo_training
-    )
- 
+
+    # Fichero general (sin {planta}) → filtrar por chunks para no saturar RAM
+    if '{planta}' not in CONFIG.fich_datos:
+        chunks = pd.read_csv(fich, index_col=0, chunksize=100_000,
+                             parse_dates=['_time', 'ini_fallo', 'fin_fallo'],
+                             on_bad_lines='error')
+        partes = [chunk[chunk['planta'] == f'pvet-{planta}'] for chunk in chunks]
+        if not any(len(p) > 0 for p in partes):
+            print(f"  Sin datos para planta={planta}")
+            return None
+        df = pd.concat(partes)
+        df = df.dropna(axis=1, how='all')
+        df = df.fillna(0)
+        df = df.loc[:, (df != 0).any(axis=0)]
+
+    # Fichero por planta → usar cargar_datos normal
+    else:
+        df = cargar_datos(CONFIG, fich)
+
     if df is None or len(df) == 0:
         print(f"  DataFrame vacío para planta={planta}")
         return None
- 
+
     if df.isna().any().any():
         print("  Warning: hay NaNs en los datos cargados")
     else:
         print("  Sin NaNs en los datos")
- 
+
     return df
  
  
@@ -494,12 +535,12 @@ def cargar_y_agregar(CONFIG, grupo_plantas, tipo_disp, diag):
         df = cargar_datos_planta(CONFIG, planta, tipo_disp)
         if df is None:
             continue
- 
-        # Filtra por diag conservando los casos sanos (diag==0)
-        if diag is not None:
-            df = df[df['diag'].isin([0, int(diag)])]
-            if len(df[df['diag'] != 0]) == 0:
-                print(f"  Sin casos de diag={diag} para planta={planta}")
+
+        # Filtrar por planta si el fichero contiene todas las plantas
+        if '{planta}' not in CONFIG.fich_datos and 'planta' in df.columns:
+            df = df[df['planta'] == f'pvet-{planta}']
+            if len(df) == 0:
+                print(f"  Sin datos para planta={planta}")
                 continue
  
         datos = generar_datos_aprendizaje(df, planta, diag, CONFIG.transform_type)
@@ -552,7 +593,7 @@ def hacer_tuning(datos, CONFIG, patron, nombre_modelo):
         shutil.rmtree(tuner_dir)
  
     hipermodelo = Hipermodelo(
-        model_fn   = config_modelo['model'],
+        model   = config_modelo['model'],
         X_shape    = X_train.shape,
         num_clases = datos['num_clases']
     )
@@ -594,13 +635,12 @@ def entrenar_modelo_final(modelo, datos, best_hp, CONFIG, nombre_modelo):
     historia = entrenar_modelo(
         modelo,
         X_train,
-        datos['y_train'],
         datos['y_train_cat'],
         X_test,
         datos['y_test_cat'],
         epochs     = CONFIG.epochs_final,
-        batch_size = best_hp.get('batch_size'),
-        patience   = best_hp.get('patience'),
+        batch_size = CONFIG.batch_size,
+        patience   = CONFIG.patience,
     )
     return historia
  
@@ -617,7 +657,7 @@ def guardar_resultados(modelo, historia, datos, patron, nombre_modelo):
     keras.utils.plot_model(modelo, show_shapes=True, to_file=f'{patron}-modelo.png')
     dibujar_historial(historia, patron_ficheros=patron)
     evaluar_modelo(modelo, datos_eval, patron_ficheros=patron)
-    permutation_importance_model(modelo, datos_eval, datos['var_list'], patron)
+    #permutation_importance_model(modelo, datos_eval, datos['var_list'], patron)
  
  
 # ─────────────────────────────────────────────────────────────────────────────
@@ -665,3 +705,7 @@ def main(args):
             ejecutar_experimento(CONFIG, datos, patron)
             print('\n' * 3)
  
+
+# %%
+
+main(["config/config_rn2.py"])

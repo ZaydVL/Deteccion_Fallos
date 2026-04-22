@@ -12,7 +12,8 @@ import config_global
 CONFIG = config_global.ConfigGlobal()
 
 from dibujo_fallos import dibujar_fallo
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
 from sklearn.metrics import classification_report, confusion_matrix
 
 ###################################################################
@@ -50,7 +51,7 @@ def separar_df_train_test(df_fallos, frac_train=0.8):
 
 ###################################################################
 
-def extraer_xy_df(df, multiclass_output=False):
+def extraer_xy_df_old(df, multiclass_output=False):
     """Extrae las variables X e y del DataFrame de fallos.
     Si hay N casos, cada uno con V variables y T pasos, X tendrá forma (N, T, V)
     e y tendrá forma (N,)."""
@@ -95,39 +96,90 @@ def extraer_xy_df(df, multiclass_output=False):
         id_casos.append(id_caso)
     return X, y, id_casos
 
+
+def extraer_xy_df(df, return_var_list=True, variables_por_tipo=None, var_entrada_override=None):
+    if df.empty:
+        raise ValueError("El DataFrame pasado a extraer_xy_df está vacío")
+    
+    tipo_disp = df['tipo_disp'].iloc[0]
+
+    if var_entrada_override and tipo_disp in var_entrada_override:
+        var_entrada = var_entrada_override[tipo_disp]
+    else:
+        excluir = {'ct', 'in', 'tr', 'st', 'sb',
+            'id_caso', 'id_fallo', 'planta', 'pvet_id', 'pvet_disp', 'tipo_disp', 'diag', 'diag_txt',
+            'ini_fallo', 'fin_fallo', 'duration', 'fallo_continuo', 'ope_ck', 'fallo'}
+        var_entrada = [col for col in df.columns
+                    if col not in excluir and pd.api.types.is_numeric_dtype(df[col])]
+
+    cols_df = set(df.columns)
+    var_entrada_existentes = [v for v in var_entrada if v in cols_df]
+    missing_vars = [v for v in var_entrada if v not in cols_df]
+    if missing_vars:
+        print(f"Advertencia: variables esperadas no están en el DF: {missing_vars}")
+    if not var_entrada_existentes:
+        raise ValueError(f"No quedan variables de entrada válidas para tipo_disp={tipo_disp}")
+
+    var_entrada = sorted(var_entrada_existentes)
+    var_salida = 'fallo'
+
+    X_list, y_list, id_casos = [], [], []
+    for id_caso in df['id_caso'].unique():
+        df_caso = df[df['id_caso'] == id_caso]
+        x = df_caso[var_entrada].astype(float).values
+        valores_fallo = df_caso[var_salida].unique()
+        if len(valores_fallo) > 1:
+            print(f"Inconsistencia en caso {id_caso}: múltiples valores de 'fallo': {valores_fallo}")
+        y = int(valores_fallo[0])
+        X_list.append(x)
+        y_list.append(y)
+        id_casos.append(id_caso)
+
+    shape0 = X_list[0].shape
+    for i, x in enumerate(X_list):
+        if x.shape != shape0:
+            raise ValueError(f"El caso {id_casos[i]} tiene forma {x.shape}, esperado: {shape0}")
+
+    X = np.stack(X_list)
+    y = np.array(y_list, dtype=int)
+
+    if return_var_list:
+        return X, y, id_casos, var_entrada
+    return X, y, id_casos
+
 ###################################################################
 
-def dibujar_historial(historia, patrón_ficheros=None):
+def dibujar_historial(historia, patron_ficheros=None):
     """Dibuja el historial de entrenamiento del modelo."""
-    plt.figure(figsize=(12, 6))
-    plt.subplot(1, 2, 1)
-    plt.plot(historia.history['loss'], label='Loss de entrenamiento')
-    plt.plot(historia.history['val_loss'], label='Loss de validación')
-    plt.title('Pérdida del modelo')
-    plt.xlabel('Épocas')
-    plt.ylabel('Pérdida')
-    plt.legend()
-
-    plt.subplot(1, 2, 2)
-    plt.plot(historia.history['accuracy'], label='Precisión de entrenamiento')
-    plt.plot(historia.history['val_accuracy'], label='Precisión de validación')
-    plt.title('Precisión del modelo')
-    plt.xlabel('Épocas')
-    plt.ylabel('Precisión')
-    plt.legend()
-
+    metricas = historia.history.keys()
+    metricas_a_graficar = []
+    for metrica in metricas:
+        if not metrica.startswith('val_'):
+            val_metrica = f'val_{metrica}'
+            if val_metrica in metricas:
+                metricas_a_graficar.append((metrica, val_metrica))
+    print("Métricas a graficar:", metricas_a_graficar)
+    n_graficos = len(metricas_a_graficar)
+    plt.figure(figsize=(6 * n_graficos, 5))
+    for idx, (metrica_ent, metrica_val) in enumerate(metricas_a_graficar, start=1):
+        plt.subplot(1, n_graficos, idx)
+        plt.plot(historia.history[metrica_ent], label=f'{metrica_ent} (entrenamiento)')
+        plt.plot(historia.history[metrica_val], label=f'{metrica_val} (validación)')
+        plt.title(f'{metrica_ent.capitalize()} del modelo')
+        plt.xlabel('Épocas')
+        plt.ylabel(metrica_ent.capitalize())
+        plt.legend()
     plt.tight_layout()
-
-    if patrón_ficheros is not None:
-        plt.savefig(f'{patrón_ficheros}-historial_entrenamiento.png')
+    if patron_ficheros is not None:
+        plt.savefig(f'{patron_ficheros}-historial_entrenamiento.png')
     else:
         plt.show()
     plt.close()
 
 ###################################################################
 
-def cargar_datos(CONFIG, planta=None):
-    nom_fich_datos = CONFIG.fich_datos
+def cargar_datos(CONFIG, nom_fich_datos, planta=None):
+    # nom_fich_datos = CONFIG.fich_datos
     if '{planta}' in nom_fich_datos and planta is not None:
         nom_fich_datos = nom_fich_datos.replace('{planta}', planta)
     if not os.path.exists(nom_fich_datos):
@@ -140,7 +192,7 @@ def cargar_datos(CONFIG, planta=None):
     # Elimina columnas que son solo ceros
     df_fallos = df_fallos.loc[:, (df_fallos != 0).any(axis=0)]
     # Se queda solo con una cierta cantidad máxima de casos sanos para cada fallo,
-    # más todos los que sean sintéticos (promedio..., tienen pvet_id = 0)
+    # y, si se quiere, más todos los que sean sintéticos (promedio..., tienen pvet_id = 0)
     max_num_casos_sanos = CONFIG.max_disp_sanos_por_fallo if hasattr(CONFIG, 'max_disp_sanos_por_fallo') else 5
     for id_fallo in df_fallos['id_fallo'].unique():
         id_casos_sanos = df_fallos.query(f'(id_fallo == {id_fallo}) & (~ fallo) & pvet_id > 0')['id_caso'].unique()
@@ -149,9 +201,10 @@ def cargar_datos(CONFIG, planta=None):
             df_fallos = df_fallos[~df_fallos['id_caso'].isin(id_casos_sanos_a_eliminar)]
     return df_fallos
 
+
 ###################################################################
 
-def generar_datos_aprendizaje(df_fallos_base, planta, diag):
+def generar_datos_aprendizaje_old(df_fallos_base, planta, diag):
 
     """
 
@@ -227,6 +280,192 @@ def generar_datos_aprendizaje(df_fallos_base, planta, diag):
     datos_aprendizaje['scaler'] = scaler
 #    datos_aprendizaje[''] = 
     return datos_aprendizaje
+
+
+
+def normalizar_X(X, transform_type):
+    # X.shape = (N, T, V)
+    N, T, V = X.shape
+    X_reshaped = X.reshape(-1, V)  # (N*T, V)
+    
+    # scaler = StandardScaler()
+    if transform_type == 'gramian':
+        scaler = MinMaxScaler(feature_range=(-1, 1))
+    else:
+        scaler = MinMaxScaler(feature_range=(0, 1))
+    X_scaled = scaler.fit_transform(X_reshaped)
+    
+    X_norm = X_scaled.reshape(N, T, V)
+    return X_norm, scaler
+
+def separar_df_train_test_caso(df_fallos, frac_train=0.8, random_state=None):
+    """
+    Separa los datos de fallos en conjuntos de entrenamiento y prueba, teniendo
+    en cuenta bloques de id_fallo.
+    Cada id_fallo (fallo + sus sanos asociados) va completo a train o test.
+    El porcentaje se aplica sobre el número de fallos (bloques).
+    """
+    # Obtener bloques únicos (cada uno contiene 1 fallo + k sanos)
+    bloques = df_fallos['id_fallo'].unique()
+    if len(bloques) < 2:
+        print("No hay suficientes bloques (id_fallo) para dividir.")
+        return None, None
+    bloques_train, bloques_test = train_test_split(
+        bloques,
+        train_size=frac_train,
+        random_state=random_state
+    )
+    df_train = df_fallos[df_fallos['id_fallo'].isin(bloques_train)]
+    df_test  = df_fallos[df_fallos['id_fallo'].isin(bloques_test)]
+    # Estadísticas
+    n_bloques_train = df_train['id_fallo'].nunique()
+    n_bloques_test  = df_test['id_fallo'].nunique()
+    n_casos_train = df_train['id_caso'].nunique()
+    n_casos_test  = df_test['id_caso'].nunique()
+    n_fallos_train = df_train[df_train['fallo']]['id_caso'].nunique()
+    n_fallos_test  = df_test[df_test['fallo']]['id_caso'].nunique()
+    print(f"Bloques train: {n_bloques_train}, casos: {n_casos_train}, fallos: {n_fallos_train}")
+    print(f"Bloques test:  {n_bloques_test}, casos: {n_casos_test}, fallos: {n_fallos_test}")
+    return df_train, df_test
+
+
+
+def generar_datos_aprendizaje_old(df_fallos_base, planta, diag, transform_type = None):
+    # df_fallos_base['fallo_acotado'] = (
+    #     (df_fallos_base['fallo']) &
+    #     (df_fallos_base.index >= df_fallos_base['ini_fallo']) &
+    #     (df_fallos_base.index <= df_fallos_base['fin_fallo'])
+    # ).astype(int)
+    df_fallos = df_fallos_base[df_fallos_base['diag'] == diag]
+    diag_txt = df_fallos[df_fallos['fallo']]['diag_txt'].iloc[0]
+    tipo_disp = df_fallos[df_fallos['fallo']]['tipo_disp'].iloc[0]
+    num_casos = df_fallos['id_caso'].nunique()
+    num_fallos = df_fallos['id_fallo'].nunique()
+    print(f'Número de casos con diagnóstico {diag}/{diag_txt}: {num_casos} total ({num_casos-num_fallos} sanos, {num_fallos} fallos)')
+    if num_casos < 2 or num_fallos < 2:
+        print(f'No hay suficientes casos o fallos para entrenar un modelo. Número de casos: {num_casos}, número de fallos: {num_fallos}')
+        return None
+    if df_fallos.isna().any().any():
+        print("Hay NaNs en df_fallos antes de separar train/test")
+        print(df_fallos.isna().sum()[df_fallos.isna().sum() > 0])
+    df_train, df_test = separar_df_train_test_caso(df_fallos, frac_train=0.8)
+    if df_train is None or df_test is None:
+        print("No se pudo separar en train/test con fallos en ambos")
+        return None
+    print("NaNs en df_train:", df_train.isna().sum()[df_train.isna().sum() > 0])
+    print("NaNs en df_test:", df_test.isna().sum()[df_test.isna().sum() > 0])
+    X_train, y_train, id_casos_train, var_list = extraer_xy_df(df_train, return_var_list=True)
+    X_test, y_test, id_casos_test, _ = extraer_xy_df(df_test, return_var_list=True)  
+    print("NaNs en X_train (numpy array):", np.isnan(X_train).any())
+    print("NaNs en X_test (numpy array):", np.isnan(X_test).any())
+    print("pd.NA en X_train:", pd.isna(X_train).any())
+    print("pd.NA en X_test:", pd.isna(X_test).any())
+    if len(var_list) == 0:
+            print("No quedan variables válidas para entrenamiento tras filtrar")
+            return None
+    print("Tipos en X_train antes de normalizar:", type(X_train), X_train.dtype)
+
+    if transform_type is None:
+        scaler = keras.utils.normalize
+        X_train = scaler(X_train, axis=1)
+        X_test = scaler(X_test, axis=1)
+    else:
+        X_train, scaler = normalizar_X(X_train, transform_type)
+        X_test = scaler.transform(X_test.reshape(-1, X_test.shape[2])).reshape(X_test.shape)
+    datos_aprendizaje = {
+        'diag': diag,
+        'diag_txt': diag_txt,
+        'planta': planta,
+        'tipo_disp': tipo_disp,
+        'df_fallos': df_fallos,
+        'df_train': df_train,
+        'df_test': df_test,
+        'X_train': X_train,
+        'y_train': y_train,
+        'id_casos_train': id_casos_train,
+        'X_test': X_test,
+        'y_test': y_test,
+        'id_casos_test': id_casos_test,
+        'scaler': scaler,
+        'var_list': var_list
+    }
+    return datos_aprendizaje
+
+def generar_datos_aprendizaje(df_fallos_base, planta, diag, transform_type = None):
+    # df_fallos_base['fallo_acotado'] = (
+    #     (df_fallos_base['fallo']) &
+    #     (df_fallos_base.index >= df_fallos_base['ini_fallo']) &
+    #     (df_fallos_base.index <= df_fallos_base['fin_fallo'])
+    # ).astype(int)
+    df_fallos = df_fallos_base[df_fallos_base['diag'] == diag]
+    df_con_fallo = df_fallos[df_fallos['fallo']]
+    
+    if len(df_con_fallo) == 0:
+        print(f"  No hay casos con fallo=True para diag={diag} en planta={planta}")
+        return None
+    
+    diag_txt  = df_con_fallo['diag_txt'].iloc[0]
+    tipo_disp = df_con_fallo['tipo_disp'].iloc[0]
+    num_casos = df_fallos['id_caso'].nunique()
+    num_fallos = df_fallos['id_fallo'].nunique()
+    print(f'Número de casos con diagnóstico {diag}/{diag_txt}: {num_casos} total ({num_casos-num_fallos} sanos, {num_fallos} fallos)')
+    if num_casos < 2 or num_fallos < 2:
+        print(f'No hay suficientes casos o fallos para entrenar un modelo. Número de casos: {num_casos}, número de fallos: {num_fallos}')
+        return None
+    if df_fallos.isna().any().any():
+        print("Hay NaNs en df_fallos antes de separar train/test")
+        print(df_fallos.isna().sum()[df_fallos.isna().sum() > 0])
+    df_train, df_test = separar_df_train_test_caso(df_fallos, frac_train=0.8)
+    if df_train is None or df_test is None:
+        print("No se pudo separar en train/test con fallos en ambos")
+        return None
+    print("NaNs en df_train:", df_train.isna().sum()[df_train.isna().sum() > 0])
+    print("NaNs en df_test:", df_test.isna().sum()[df_test.isna().sum() > 0])
+    X_train, y_train, id_casos_train, var_list = extraer_xy_df(
+        df_train, 
+        return_var_list=True,
+        var_entrada_override=getattr(CONFIG, 'var_entrada', None)
+    )
+    X_test, y_test, id_casos_test, _ = extraer_xy_df(
+        df_test,
+        return_var_list=True,
+        var_entrada_override=getattr(CONFIG, 'var_entrada', None)
+    )
+    print("NaNs en X_train (numpy array):", np.isnan(X_train).any())
+    print("NaNs en X_test (numpy array):", np.isnan(X_test).any())
+    print("pd.NA en X_train:", pd.isna(X_train).any())
+    print("pd.NA en X_test:", pd.isna(X_test).any())
+    if len(var_list) == 0:
+            print("No quedan variables válidas para entrenamiento tras filtrar")
+            return None
+    print("Tipos en X_train antes de normalizar:", type(X_train), X_train.dtype)
+
+    if transform_type is None:
+        scaler = keras.utils.normalize
+        X_train = scaler(X_train, axis=1)
+        X_test = scaler(X_test, axis=1)
+    else:
+        X_train, scaler = normalizar_X(X_train, transform_type)
+        X_test = scaler.transform(X_test.reshape(-1, X_test.shape[2])).reshape(X_test.shape)
+    datos_aprendizaje = {
+        'diag': diag,
+        'diag_txt': diag_txt,
+        'planta': planta,
+        'tipo_disp': tipo_disp,
+        'df_fallos': df_fallos,
+        'df_train': df_train,
+        'df_test': df_test,
+        'X_train': X_train,
+        'y_train': y_train,
+        'id_casos_train': id_casos_train,
+        'X_test': X_test,
+        'y_test': y_test,
+        'id_casos_test': id_casos_test,
+        'scaler': scaler,
+        'var_list': var_list
+    }
+    return datos_aprendizaje
+
 
 ###################################################################
 
@@ -321,7 +560,7 @@ def train_test_data(df_fallos_base, multiclass_output = False, planta=None, diag
 
 ###################################################################
 
-def evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros):
+def evaluar_modelo(modelo, datos_aprendizaje, patron_ficheros):
         X_test = datos_aprendizaje['X_test']
         y_test = datos_aprendizaje['y_test']
         planta = datos_aprendizaje['planta']
@@ -344,7 +583,7 @@ def evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros):
                 plt.xlabel('Timestep')
                 plt.ylabel('Valor normalizado')
                 plt.tight_layout()
-                plt.savefig(f"{patrón_ficheros}-X_test-{i}.png")
+                plt.savefig(f"{patron_ficheros}-X_test-{i}.png")
                 plt.close()
 
         loss, accuracy = modelo.evaluate(X_test, y_test)
@@ -359,7 +598,7 @@ def evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros):
         # Guardar matriz de confusión y métricas relevantes en CSV
         conf_matrix = confusion_matrix(y_test, y_pred)
         conf_matrix_df = pd.DataFrame(conf_matrix)
-        conf_matrix_df.to_csv(f"{patrón_ficheros}-matriz_confusion.csv", index=False)
+        conf_matrix_df.to_csv(f"{patron_ficheros}-matriz_confusion.csv", index=False)
 
         report_dict = classification_report(y_test, y_pred, digits=3, zero_division=np.nan, output_dict=True)
         report_df = pd.DataFrame(report_dict).transpose()
@@ -369,7 +608,7 @@ def evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros):
                 label = label + str(o) + ' / ' 
             report_df[campo] = label[:-2]
 
-        report_df.to_csv(f"{patrón_ficheros}-metricas.csv")
+        report_df.to_csv(f"{patron_ficheros}-metricas.csv")
 
         df_info_pruebas = None
         for i in range(X_test.shape[0]):
@@ -409,11 +648,11 @@ def evaluar_modelo(modelo, datos_aprendizaje, patrón_ficheros):
                 #dibujar_fallo(df_test[df_test['id_caso'] == id_caso], gráfica, tipo_comparación='PROMEDIO')
                 try: 
                     dibujar_fallo(df_fallos[df_fallos['id_fallo'] == id_fallo], gráfica, comentario=comentario, tipo_comparación='PROMEDIO')
-                    plt.savefig(f'{patrón_ficheros}-fallo-{id_fallo}.png', dpi=300)
+                    plt.savefig(f'{patron_ficheros}-fallo-{id_fallo}.png', dpi=300)
                     #plt.show()
                     plt.close()
                 except:
                     continue
-        df_info_pruebas.to_csv(f"{patrón_ficheros}-info-pruebas.csv", index=False)
+        df_info_pruebas.to_csv(f"{patron_ficheros}-info-pruebas.csv", index=False)
 
 # %%
